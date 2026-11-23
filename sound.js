@@ -19,6 +19,7 @@ let helloAt = 0, helloKind = "hello";
 let hiddenAt = 0;
 let tapTimer = 0;
 let music = null; // { next, step, bar, prog, chord, idx, rest, timer }
+let onMusic = null; // báo cho giao diện khi nhạc thật sự bắt đầu / dừng
 
 /* ---------------- Dựng hệ thống âm thanh ---------------- */
 
@@ -232,6 +233,9 @@ export const sound = {
 
   get sfx() { return sfxOn; },
   get music() { return musicOn; },
+  // Nhạc có đang thật sự phát không (bật nhưng trình duyệt chưa cho phát → false)
+  get playing() { return !!music && running(); },
+  onMusicChange(fn) { onMusic = fn; },
   setSfx(on) { sfxOn = !!on; },
   setMusic(on) {
     musicOn = !!on;
@@ -321,6 +325,7 @@ function startMusic() {
   music = { next: t + 0.15, step: 0, bar: 0, prog: PROGS[0], chord: CHORDS.F, idx: 2, rest: false };
   scheduleMusic();
   music.timer = setInterval(scheduleMusic, 150);
+  onMusic?.();
 }
 
 function stopMusic(fade = 0.6) {
@@ -331,4 +336,5 @@ function stopMusic(fade = 0.6) {
   musicBus.gain.cancelScheduledValues(t);
   musicBus.gain.setValueAtTime(musicBus.gain.value, t);
   musicBus.gain.linearRampToValueAtTime(0, t + fade);
+  onMusic?.();
 }

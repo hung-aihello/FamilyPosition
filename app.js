@@ -2,7 +2,7 @@ import { firebaseConfig, appCheckSiteKey } from "./config.js";
 import { sound } from "./sound.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "1.10.1";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -191,8 +191,10 @@ function setMusic(on) {
 }
 function renderMusicBtn() {
   const b = $("#musicBtn");
-  b.setAttribute("aria-pressed", String(!!state.music));
-  b.setAttribute("aria-label", state.music ? "Tắt nhạc nền" : "Bật nhạc nền");
+  const on = !!state.music, live = sound.playing;
+  b.setAttribute("aria-pressed", String(on && live));
+  b.classList.toggle("waiting", on && !live); // bật nhưng trình duyệt chưa cho phát → mời chạm
+  b.setAttribute("aria-label", !on ? "Bật nhạc nền" : live ? "Tắt nhạc nền" : "Chạm để phát nhạc nền");
 }
 
 // Trên điện thoại hộp thoại là "bảng" trượt từ dưới lên → vuốt xuống để đóng.
@@ -1893,6 +1895,9 @@ function bindMainUi() {
   $("#musicToggle").addEventListener("change", (e) => setMusic(e.currentTarget.checked));
   $("#musicBtn").addEventListener("click", () => {
     buzz();
+    // Nhạc đang bật nhưng trình duyệt chưa cho phát (chưa chạm lần nào) → chạm này là để PHÁT, không phải tắt.
+    // Lúc này lần chạm vừa mở khoá âm thanh nhưng nhạc chưa kịp bắt đầu, nên sound.playing vẫn là false.
+    if (state.music && !sound.playing) return setMusic(true);
     setMusic(!state.music);
     toast(state.music ? "🎵 Đã bật nhạc nền" : "🔇 Đã tắt nhạc nền");
   });
@@ -2207,6 +2212,8 @@ async function boot() {
   setupDialogs();
   sound.setSfx(state.sfx);
   sound.setMusic(state.music);
+  sound.onMusicChange(renderMusicBtn);
+  renderMusicBtn();
   bindTapSound();
 
   const configured = firebaseConfig?.databaseURL && !/YOUR_/.test(firebaseConfig.databaseURL + firebaseConfig.apiKey);

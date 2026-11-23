@@ -824,8 +824,15 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 
 /* Nút bật/tắt nhạc nền: đang phát thì nốt nhạc nhún nhảy theo nhịp, tắt thì có gạch chéo */
 .music-fab .mute { display: none; }
-.music-fab[aria-pressed="false"] .mute { display: inline; }
+.music-fab[aria-pressed="false"]:not(.waiting) .mute { display: inline; }
 .music-fab[aria-pressed="false"] svg { stroke: var(--text-muted); }
 .music-fab[aria-pressed="true"] svg { stroke: var(--primary); animation: music-bob 1.67s ease-in-out infinite; }
 @keyframes music-bob { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-2px) rotate(-6deg); } 75% { transform: translateY(-1px) rotate(5deg); } }
-@media (prefers-reduced-motion: reduce) { .music-fab svg { animation: none !important; } }
+/* Nhạc đang bật nhưng trình duyệt chặn tự phát: nút toả sóng mời chạm */
+.music-fab.waiting svg { stroke: var(--primary); }
+.music-fab.waiting { animation: music-call 1.8s ease-out infinite; }
+@keyframes music-call {
+  0% { box-shadow: var(--shadow), 0 0 0 0 color-mix(in srgb, var(--primary) 45%, transparent); }
+  70%, 100% { box-shadow: var(--shadow), 0 0 0 14px color-mix(in srgb, var(--primary) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .music-fab svg, .music-fab.waiting { animation: none !important; } }
