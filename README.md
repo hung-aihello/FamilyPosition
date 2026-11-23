@@ -51,7 +51,16 @@ App Check bắt mọi request tới database phải đến từ chính trang web
 
 > ⚠️ Chỉ Enforce **Realtime Database**. Đừng Enforce Firestore/Storage nếu app khác dùng chung project mà chưa tích hợp App Check — app đó sẽ bị chặn.
 
-Chạy trên `localhost`: console in ra *App Check debug token* → thêm vào **App Check → Apps → ⋮ → Manage debug tokens**.
+Chạy trên `localhost`: App Check mặc định bị bỏ qua. Sau khi đã Enforce mà cần chạy local: mở console gõ `localStorage.appCheckDebug = 1` → tải lại → console in ra *App Check debug token* → thêm vào **App Check → Apps → ⋮ → Manage debug tokens**.
+
+## Xoá một thành viên
+Xoá bản ghi `families/{mã-nhóm}/members/{id}` trong Firebase Console (tab **Data**) hoặc bằng CLI:
+```bash
+firebase database:remove /families/<mã-nhóm>/members/<id> --project nha-minh-7ef58
+```
+Máy của người đó sẽ tự thoát về màn hình chào với thông báo “Bạn đã được xoá khỏi nhóm”. Họ có thể vào lại bằng mã mời.
+
+> Máy đang chạy bản app cũ (trước khi có tính năng này) sẽ tạo lại bản ghi một lần khi tải bản mới — xoá lại lần nữa là xong.
 
 ## Chạy thử trên máy
 Định vị chỉ hoạt động trên `https://` hoặc `localhost`:

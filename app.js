@@ -137,9 +137,16 @@ async function loadFirebase() {
 // (reCAPTCHA v3 "classic" đã bị Firebase ngừng nhận đăng ký mới.)
 async function initAppCheck(app) {
   if (!appCheckSiteKey) return;
+  // Trên máy dev: bỏ qua App Check (debug token chưa đăng ký sẽ làm kết nối bị treo).
+  // Sau khi Enforce mà cần chạy local: mở console gõ localStorage.appCheckDebug = 1, tải lại,
+  // rồi đăng ký debug token in ra trong Firebase Console → App Check → Manage debug tokens.
+  if (["localhost", "127.0.0.1"].includes(location.hostname)) {
+    let debug = null;
+    try { debug = localStorage.getItem("appCheckDebug"); } catch { /* bỏ qua */ }
+    if (!debug) return;
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
   try {
-    // Trên máy dev, Firebase in ra "debug token" trong console để đăng ký ở Firebase Console.
-    if (["localhost", "127.0.0.1"].includes(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
     const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import(`${FIREBASE_SDK}firebase-app-check.js`);
     initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey), isTokenAutoRefreshEnabled: true });
   } catch (e) {
@@ -188,8 +195,7 @@ function startOnboarding() {
   $("#ignoreInvite").addEventListener("click", () => { pendingInvite = null; showFamilyStep(); });
 
   $("#createFamily").addEventListener("click", () => {
-    state.familyId = newFamilyCode();
-    saveState();
+    switchFamily(newFamilyCode());
     gotoStep("permission");
   });
   $("#showJoin").addEventListener("click", () => {
@@ -216,6 +222,18 @@ function showFamilyStep() {
   gotoStep("family");
 }
 
+// Chuyển sang nhóm mới; nếu đang ở nhóm khác thì rời nhóm cũ (tránh để lại "bóng ma" như vụ 2 chữ Hưng).
+function switchFamily(code) {
+  if (state.familyId && state.familyId !== code && state.member) {
+    const old = fb.ref(fb.db, `families/${state.familyId}/members/${state.memberId}`);
+    fb.onDisconnect(old).cancel().catch(() => {});
+    fb.remove(old).catch(() => {});
+  }
+  state.familyId = code;
+  state.member = false;
+  saveState();
+}
+
 function showCodeError(msg) {
   const el = $("#codeError");
   el.textContent = msg;
@@ -233,8 +251,7 @@ async function joinFamily(code, btn) {
       else showCodeError("Không tìm thấy nhóm với mã này.");
       return;
     }
-    state.familyId = code;
-    saveState();
+    switchFamily(code);
     gotoStep("permission");
   } catch (err) {
     console.error(err);
@@ -261,6 +278,21 @@ let geoError = null;
 let userMovedMap = false;  // người dùng đã tự kéo bản đồ thì không tự zoom nữa
 let autoFitCount = 0;      // số người có vị trí ở lần tự zoom gần nhất
 let wakeLock = null;
+let kicked = false;
+
+// Bản ghi của mình bị xoá từ phía quản trị → coi như bị mời ra khỏi nhóm.
+function onKicked() {
+  if (kicked) return;
+  kicked = true;
+  stopWatching();
+  releaseWakeLock();
+  fb.onDisconnect(meRef()).cancel().catch(() => {});
+  delete state.familyId;
+  state.member = false;
+  saveState();
+  try { sessionStorage.setItem("nhaminh.kicked", "1"); } catch { /* bỏ qua */ }
+  location.replace(location.pathname);
+}
 
 const now = () => Date.now() + serverOffset;
 const isDesktop = () => matchMedia("(min-width: 720px)").matches;
@@ -271,25 +303,31 @@ async function enterMain(requestLocation) {
   observeSheet();
   bindMainUi();
 
+  // Chỉ tạo hồ sơ khi mới vào nhóm. Đã là thành viên thì KHÔNG ghi lại hồ sơ,
+  // để nếu bị xoá khỏi nhóm thì máy này nhận ra và thoát, thay vì tự tạo lại.
+  // (Rules bắt buộc có "name", nên các lần ghi vị trí/online sau đó cũng không tạo lại được.)
   // Không await: Firebase tự xếp hàng khi mất mạng, UI không phải chờ.
-  const initial = { ...profilePayload(), joinedAt: fb.serverTimestamp() };
-  if (!state.sharing) Object.assign(initial, { lat: null, lng: null, acc: null });
-  fb.update(meRef(), initial).catch(onWriteError);
+  if (!state.member) {
+    const initial = { ...profilePayload(), joinedAt: fb.serverTimestamp() };
+    if (!state.sharing) Object.assign(initial, { lat: null, lng: null, acc: null });
+    fb.update(meRef(), initial).catch(onWriteError);
+  }
 
   fb.onValue(fb.ref(fb.db, ".info/serverTimeOffset"), (s) => { serverOffset = s.val() || 0; });
   fb.onValue(fb.ref(fb.db, ".info/connected"), (s) => {
     connected = !!s.val();
-    if (connected) {
-      fb.onDisconnect(meRef()).update({ online: false });
-      if (document.visibilityState === "visible") fb.update(meRef(), { online: true }).catch(onWriteError);
+    if (connected && !kicked) {
+      fb.onDisconnect(meRef()).update({ online: false }).catch(() => {});
+      if (document.visibilityState === "visible") fb.update(meRef(), { online: true }).catch(() => {});
     }
     updateStatus();
   });
   fb.onValue(famRef("members"), (s) => {
     members = s.val() || {};
-    if (!members[state.memberId] && state.familyId) {
-      // Bản ghi của mình bị xoá (ví dụ dữ liệu bị dọn) — ghi lại.
-      fb.update(meRef(), profilePayload()).catch(onWriteError);
+    if (members[state.memberId]) {
+      if (!state.member) { state.member = true; saveState(); }
+    } else if (state.member) {
+      return onKicked();
     }
     render();
   });
@@ -577,6 +615,7 @@ function pushPosition(force) {
 }
 
 function onWriteError(err) {
+  if (kicked) return; // bị xoá khỏi nhóm thì các lần ghi bị từ chối là đương nhiên
   console.error(err);
   if (String(err?.code || err).includes("PERMISSION_DENIED")) {
     toast("Máy chủ từ chối dữ liệu. Kiểm tra lại Security Rules của Firebase.", 5000);
@@ -703,7 +742,9 @@ async function saveSettings() {
 
 async function leaveFamily() {
   const ref = meRef();
-  delete state.familyId; // đặt trước để listener không ghi lại bản ghi vừa xoá
+  kicked = true; // đặt trước để listener không hiểu nhầm là bị xoá khỏi nhóm
+  delete state.familyId;
+  state.member = false;
   saveState();
   stopWatching();
   releaseWakeLock();
@@ -734,6 +775,10 @@ async function boot() {
     toast("Không tải được dữ liệu. Kiểm tra kết nối mạng.", 6000);
     return;
   }
+
+  let wasKicked = false;
+  try { wasKicked = sessionStorage.getItem("nhaminh.kicked") === "1"; sessionStorage.removeItem("nhaminh.kicked"); } catch { /* bỏ qua */ }
+  if (wasKicked) setTimeout(() => toast("Bạn đã được xoá khỏi nhóm gia đình. Có thể vào lại bằng mã mời.", 6000), 300);
 
   if (invited && invited !== state.familyId) {
     pendingInvite = invited;
