@@ -77,6 +77,15 @@
         </div>
       </div>
 
+      <!-- Bước 2b: đã có trong nhóm (máy khác) hay người mới -->
+      <div class="ob-step" data-step="claim" hidden>
+        <button class="back-link" type="button" data-goto="family">‹ Quay lại</button>
+        <h2 class="step-title">Bạn đã có trong nhóm chưa?</h2>
+        <p class="muted claim-lead">Nếu bạn từng vào nhóm này trên máy khác, hãy chọn tên mình để không bị tạo thêm người mới.</p>
+        <ul id="claimList" class="claim-list"></ul>
+        <button id="claimNew" class="btn btn-secondary btn-lg" type="button">Tôi là người mới</button>
+      </div>
+
       <!-- Bước 3: xin quyền vị trí -->
       <div class="ob-step" data-step="permission" hidden>
         <div class="hero">
@@ -167,6 +176,14 @@
           <small>Tắt đi thì người thân sẽ không thấy bạn ở đâu</small>
         </span>
         <input id="shareToggle" type="checkbox" class="switch" role="switch" aria-label="Chia sẻ vị trí của tôi">
+      </div>
+
+      <div class="switch-row">
+        <span>
+          <strong>Lấy vị trí từ máy này</strong>
+          <small>Tắt trên laptop/máy tính bảng nếu bạn đã chia sẻ từ điện thoại</small>
+        </span>
+        <input id="gpsToggle" type="checkbox" class="switch" role="switch" aria-label="Lấy vị trí từ máy này">
       </div>
 
       <div class="switch-row" id="wakeRow">

@@ -75,6 +75,15 @@ npx serve .
 # rồi mở http://localhost:3000
 ```
 
+## Một người dùng nhiều máy
+Mở link mời trên máy thứ hai → sau khi nhập tên, app hỏi **“Bạn đã có trong nhóm chưa?”** và đưa người trùng tên lên đầu (“Có phải bạn?”). Chọn tên mình → máy mới **dùng chung danh tính** với máy cũ: cùng một chấm trên bản đồ, không tạo thêm thành viên.
+
+- **Chia sẻ vị trí của tôi** (Cài đặt) áp dụng cho **cả người** — tắt ở máy nào cũng là tắt ở mọi máy.
+- **Lấy vị trí từ máy này** chỉ áp dụng cho máy đang dùng — tắt trên laptop/máy tính bảng để chỉ xem.
+- Máy định vị kém (sai số > 1 km, thường là laptop) không ghi đè vị trí tốt mà điện thoại gửi trong 10 phút gần đây.
+- Đổi tên/hình ở một máy thì các máy khác tự cập nhật. Rời nhóm ở một máy thì mọi máy của người đó cùng thoát.
+- Lỡ tạo tài khoản rác trên máy mới: trên máy đó **Rời nhóm** → mở lại link mời → chọn đúng tên mình.
+
 ## Đổi mã nhóm
 **⚙️ Cài đặt → 🔄 Đổi mã nhóm**: bạn chuyển sang nhóm mới với mã mới, app tự mở hộp mời để gửi lại cho những người muốn giữ. Ai chỉ có mã cũ sẽ không thấy bạn nữa. Dùng khi mã bị lộ hoặc muốn loại ai đó ra — đây là cách **thu hồi quyền truy cập thật sự** (xem giới hạn bên dưới).
 

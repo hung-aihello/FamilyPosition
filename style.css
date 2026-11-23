@@ -319,6 +319,25 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .switch:checked { background: var(--primary); }
 .switch:checked::after { transform: translateX(24px); }
 
+/* Bước "Bạn đã có trong nhóm chưa?" */
+.claim-lead { text-align: center; margin: -8px 0 18px; }
+.claim-list { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px; }
+.claim-item {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 12px 14px; text-align: left;
+  background: var(--surface); border: 2px solid var(--border); border-radius: var(--radius);
+  transition: border-color .15s, transform .12s;
+}
+.claim-item:hover { border-color: var(--primary); }
+.claim-item:active { transform: scale(.98); }
+.claim-item .member-info { flex: 1; }
+.claim-item.match { border-color: var(--primary); background: color-mix(in srgb, var(--primary-soft) 45%, var(--surface)); }
+.claim-tag {
+  flex: none; font-size: 14px; font-weight: 600; padding: 6px 12px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-muted);
+}
+.claim-item.match .claim-tag { background: var(--primary); color: var(--on-primary); }
+
 .rekey-steps { margin: 16px 0 0; }
 .rekey-steps li { background: var(--surface-2); font-size: 16px; }
 

@@ -8,6 +8,8 @@ const PUSH_MIN_METERS = 15;     // di chuyển hơn 15 m thì gửi ngay
 const PUSH_MAX_SECONDS = 45;    // đứng yên thì vẫn gửi lại mỗi 45 giây
 const ONLINE_WINDOW = 2 * 60e3;
 const IDLE_WINDOW = 15 * 60e3;
+const POOR_ACCURACY = 1000;        // m — sai số lớn hơn mức này coi là định vị kém (thường là laptop)
+const GOOD_FIX_PROTECT = 10 * 60e3; // vị trí tốt trong 10 phút gần đây không bị định vị kém ghi đè
 
 const AVATARS = [
   ["👩", "#fecdd3"], ["👨", "#bfdbfe"], ["👵", "#e9d5ff"], ["👴", "#fde68a"],
@@ -26,9 +28,16 @@ function loadState() {
   let s = {};
   try { s = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch { /* trình duyệt chặn storage */ }
   if (!s.memberId) s.memberId = randomString(16, "abcdefghijklmnopqrstuvwxyz0123456789");
-  if (s.sharing === undefined) s.sharing = true;
+  if (s.sharing === undefined) s.sharing = true;     // chia sẻ vị trí — cấp NGƯỜI (đồng bộ giữa các máy)
+  if (s.deviceGps === undefined) s.deviceGps = true; // lấy GPS từ máy này — cấp MÁY
+  // Hàng đợi rời nhóm lưu cặp {f: mã nhóm, m: id}; bản trước chỉ lưu mã nhóm.
+  s.leaveQueue = (s.leaveQueue || []).map((x) => (typeof x === "string" ? { f: x, m: s.memberId } : x));
   return s;
 }
+// Máy này có đang cung cấp vị trí không: người đó bật chia sẻ VÀ máy này bật GPS.
+const gpsOn = () => !!state.sharing && state.deviceGps !== false;
+// So khớp tên không phân biệt hoa/thường và dấu: "Hưng" ~ "hung".
+const foldName = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().trim();
 function saveState() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch { /* bỏ qua */ }
 }
@@ -209,8 +218,14 @@ function startOnboarding() {
     joinFamily(code, $("#joinForm .btn"));
   });
 
-  $("#grantLocation").addEventListener("click", () => { state.sharing = true; saveState(); enterMain(true); });
-  $("#skipLocation").addEventListener("click", () => { state.sharing = false; saveState(); enterMain(false); });
+  $("#grantLocation").addEventListener("click", () => {
+    state.sharing = true; state.deviceGps = true; saveState(); enterMain({ grant: true });
+  });
+  // "Để sau" = máy này không lấy GPS (chỉ xem). Không tắt chia sẻ cấp người, vì người đó
+  // có thể đang chia sẻ từ điện thoại khác.
+  $("#skipLocation").addEventListener("click", () => { state.deviceGps = false; saveState(); enterMain(); });
+
+  $("#claimNew").addEventListener("click", () => { switchFamily(claimCode); gotoStep("permission"); });
 
   if (state.name && state.emoji) showFamilyStep(); else gotoStep("profile");
 }
@@ -224,37 +239,89 @@ function showFamilyStep() {
 
 // Hàng đợi "rời nhóm": lưu trong localStorage để nếu đang mất mạng (hoặc trang tải lại trước khi
 // server xác nhận) thì lần mở app sau vẫn xoá tiếp — không để lại "bóng ma" trong nhóm cũ.
-function queueLeave(familyId) {
-  if (!familyId) return;
-  const q = new Set(state.leaveQueue || []);
-  q.add(familyId);
-  state.leaveQueue = [...q];
+const sameSlot = (a, b) => a.f === b.f && a.m === b.m;
+const memberPath = ({ f, m }) => `families/${f}/members/${m}`;
+
+function queueLeave(f, m = state.memberId) {
+  if (!f) return;
+  const slot = { f, m };
+  if (!(state.leaveQueue || []).some((x) => sameSlot(x, slot))) state.leaveQueue = [...(state.leaveQueue || []), slot];
   saveState();
-  try { fb.onDisconnect(fb.ref(fb.db, `families/${familyId}/members/${state.memberId}`)).cancel().catch(() => {}); } catch { /* bỏ qua */ }
+  try { fb.onDisconnect(fb.ref(fb.db, memberPath(slot))).cancel().catch(() => {}); } catch { /* bỏ qua */ }
+}
+
+// Đừng xoá chỗ mà mình đang (vào lại) dùng.
+function unqueue(slot) {
+  state.leaveQueue = (state.leaveQueue || []).filter((x) => !sameSlot(x, slot));
 }
 
 function processLeaveQueue() {
-  const done = (fid) => {
-    state.leaveQueue = (state.leaveQueue || []).filter((f) => f !== fid);
-    saveState();
-  };
-  return Promise.all((state.leaveQueue || []).map((fid) =>
-    fb.remove(fb.ref(fb.db, `families/${fid}/members/${state.memberId}`))
-      .then(() => done(fid))
-      .catch((e) => { if (isDenied(e)) done(fid); }) // bị cấm thì cũng không xoá được nữa → bỏ khỏi hàng đợi
+  const done = (slot) => { unqueue(slot); saveState(); };
+  return Promise.all((state.leaveQueue || []).map((slot) =>
+    fb.remove(fb.ref(fb.db, memberPath(slot)))
+      .then(() => done(slot))
+      .catch((e) => { if (isDenied(e)) done(slot); }) // bị cấm thì cũng không xoá được nữa → bỏ khỏi hàng đợi
   ));
 }
 
 const isDenied = (err) => /PERMISSION_DENIED|permission.denied/i.test(String(err?.code || err?.message || err));
 
-// Chuyển sang nhóm mới; đang ở nhóm khác thì rời nhóm cũ (tránh để lại "bóng ma" như vụ 2 chữ Hưng).
+// Vào nhóm với tư cách NGƯỜI MỚI; đang ở nhóm khác thì rời nhóm cũ.
 function switchFamily(code) {
   if (state.familyId && state.familyId !== code) queueLeave(state.familyId);
-  state.leaveQueue = (state.leaveQueue || []).filter((f) => f !== code); // vào lại nhóm cũ thì đừng xoá mình
+  unqueue({ f: code, m: state.memberId });
   state.familyId = code;
   state.member = false; // false = vừa vào nhóm (khác undefined = cài từ bản cũ)
   saveState();
   processLeaveQueue();
+}
+
+// Nhận lại danh tính đã có trong nhóm (cùng một người, máy khác) → không tạo thành viên mới.
+function claimMember(code, mid, rec) {
+  const cur = { f: state.familyId, m: state.memberId };
+  if (cur.f && !sameSlot(cur, { f: code, m: mid })) queueLeave(cur.f, cur.m); // bỏ bản ghi rác của máy này (nếu có)
+  unqueue({ f: code, m: mid });
+  Object.assign(state, {
+    familyId: code, memberId: mid, member: true,
+    name: rec.name, emoji: rec.emoji || state.emoji, color: rec.color || state.color,
+    sharing: rec.sharing !== false,
+  });
+  saveState();
+  processLeaveQueue();
+}
+
+/* ---- Bước "Bạn đã có trong nhóm chưa?" ---- */
+let claimCode = null;
+function showClaimStep(code, list) {
+  claimCode = code;
+  const mine = foldName(state.name);
+  const entries = Object.entries(list || {})
+    .filter(([, m]) => m && m.name)
+    .map(([id, m]) => ({ id, m, match: !!mine && foldName(m.name) === mine }))
+    .sort((a, b) => (b.match - a.match) || ((b.m.updatedAt || 0) - (a.m.updatedAt || 0)));
+
+  const ul = $("#claimList");
+  ul.innerHTML = "";
+  for (const { id, m, match } of entries) {
+    const li = document.createElement("li");
+    const meta = m.updatedAt ? `cập nhật ${relTime(Date.now() - m.updatedAt)}` : "chưa có vị trí";
+    li.innerHTML = `
+      <button class="claim-item${match ? " match" : ""}" type="button" aria-label="${escapeHtml(`Tôi là ${m.name}`)}">
+        <span class="avatar" style="--c:${escapeHtml(m.color || "#ccfbf1")}">${escapeHtml(m.emoji || "🙂")}</span>
+        <span class="member-info">
+          <span class="member-name">${escapeHtml(m.name)}</span>
+          <span class="member-meta">${escapeHtml(meta)}</span>
+        </span>
+        <span class="claim-tag">${match ? "Có phải bạn?" : "Đây là tôi"}</span>
+      </button>`;
+    li.querySelector("button").addEventListener("click", () => {
+      claimMember(code, id, m);
+      toast(`Chào ${m.name}! Máy này sẽ dùng chung với máy cũ của bạn.`, 4000);
+      gotoStep("permission");
+    });
+    ul.appendChild(li);
+  }
+  gotoStep("claim");
 }
 
 function showCodeError(msg) {
@@ -274,8 +341,7 @@ async function joinFamily(code, btn) {
       else showCodeError("Không tìm thấy nhóm với mã này.");
       return;
     }
-    switchFamily(code);
-    gotoStep("permission");
+    showClaimStep(code, snap.val());
   } catch (err) {
     console.error(err);
     toast("Không kết nối được. Kiểm tra mạng rồi thử lại nhé.");
@@ -291,6 +357,7 @@ async function joinFamily(code, btn) {
 let map, myAccuracyCircle;
 const markers = new Map(); // memberId -> { marker, html }
 let members = {};
+let membersLoaded = false;
 let serverOffset = 0;
 let connected = false;
 let watchId = null;
@@ -318,10 +385,24 @@ function onKicked(reason = "removed") {
   location.replace(location.pathname);
 }
 
+// Cùng một người dùng nhiều máy: tên/hình/chia sẻ đổi ở máy kia thì máy này theo.
+function syncFromServer(mine) {
+  let changed = false;
+  for (const k of ["name", "emoji", "color"]) {
+    if (mine[k] && mine[k] !== state[k]) { state[k] = mine[k]; changed = true; }
+  }
+  if (typeof mine.sharing === "boolean" && mine.sharing !== state.sharing) {
+    state.sharing = mine.sharing;
+    changed = true;
+    if (gpsOn()) { lastPush = { at: 0, lat: null, lng: null }; startWatching(); } else stopWatching();
+  }
+  if (changed) { saveState(); updateStatus(); }
+}
+
 const now = () => Date.now() + serverOffset;
 const isDesktop = () => matchMedia("(min-width: 720px)").matches;
 
-async function enterMain(requestLocation) {
+async function enterMain(opts = {}) {
   showScreen("main");
   initMap();
   observeSheet();
@@ -339,6 +420,9 @@ async function enterMain(requestLocation) {
     if (!state.sharing) Object.assign(initial, { lat: null, lng: null, acc: null });
     // Server từ chối (ID bị cấm) → không cho ở lại màn hình bản đồ.
     fb.update(meRef(), initial).catch((e) => (isDenied(e) ? onKicked("banned") : onWriteError(e)));
+  } else if (opts.grant) {
+    // Nhận lại danh tính cũ rồi bấm "Cho phép" → bật chia sẻ cho người này.
+    fb.update(meRef(), { sharing: true }).catch(onWriteError);
   }
 
   fb.onValue(fb.ref(fb.db, ".info/serverTimeOffset"), (s) => { serverOffset = s.val() || 0; });
@@ -352,12 +436,17 @@ async function enterMain(requestLocation) {
   });
   fb.onValue(famRef("members"), (s) => {
     members = s.val() || {};
-    if (members[state.memberId]) {
+    const firstLoad = !membersLoaded;
+    membersLoaded = true;
+    const mine = members[state.memberId];
+    if (mine) {
       if (!state.member) { state.member = true; saveState(); }
+      syncFromServer(mine);
     } else if (state.member) {
       return onKicked();
     }
     render();
+    if (firstLoad && myPos) pushPosition(false); // GPS có trước dữ liệu nhóm → giờ mới gửi
   });
 
   if (navigator.getBattery) {
@@ -369,11 +458,11 @@ async function enterMain(requestLocation) {
     }).catch(() => {});
   }
 
-  if (state.sharing && requestLocation !== false) startWatching();
+  if (gpsOn()) startWatching();
   updateStatus();
 
   setInterval(() => {
-    if (myPos && state.sharing && document.visibilityState === "visible") pushPosition(true);
+    if (myPos && gpsOn() && document.visibilityState === "visible") pushPosition(true);
     render();
   }, 30e3);
 
@@ -382,7 +471,7 @@ async function enterMain(requestLocation) {
     const visible = document.visibilityState === "visible";
     fb.update(meRef(), { online: visible }).catch(() => {});
     if (visible) {
-      if (myPos && state.sharing) pushPosition(true);
+      if (myPos && gpsOn()) pushPosition(true);
       if (state.wake) requestWakeLock();
       render();
     }
@@ -428,9 +517,16 @@ function focusOn(points, animate = true) {
 // Dữ liệu từ server + bản ghi của chính mình lấy từ máy (để vẫn hiện "Tôi" khi mạng chậm/mất).
 function allMembers() {
   const me = { ...(members[state.memberId] || {}), ...profilePayload() };
-  if (state.sharing && myPos) Object.assign(me, { lat: myPos.lat, lng: myPos.lng, acc: myPos.acc });
+  // Máy này đang lấy GPS → dùng vị trí trên máy. Máy chỉ xem → giữ vị trí từ máy khác (trên server).
+  if (gpsOn() && myPos) Object.assign(me, { lat: myPos.lat, lng: myPos.lng, acc: myPos.acc });
   if (!state.sharing) { delete me.lat; delete me.lng; }
   return { ...members, [state.memberId]: me };
+}
+
+// Vị trí "của tôi" để tính khoảng cách: GPS máy này, hoặc vị trí từ máy khác của tôi.
+function myLocation() {
+  const me = allMembers()[state.memberId];
+  return state.sharing && typeof me?.lat === "number" ? me : null;
 }
 
 function locatedMembers() {
@@ -440,7 +536,7 @@ function locatedMembers() {
 }
 
 function memberStatus(m, id) {
-  if (id === state.memberId) return state.sharing && myPos ? "on" : "off";
+  if (id === state.memberId && gpsOn()) return myPos ? "on" : "off";
   const age = now() - (m.updatedAt || 0);
   if (m.online && age < ONLINE_WINDOW) return "on";
   if (age < IDLE_WINDOW) return "idle";
@@ -493,7 +589,7 @@ function renderMarkers() {
     if (!seen.has(id)) { entry.marker.remove(); markers.delete(id); }
   }
 
-  if (myPos && state.sharing) {
+  if (myPos && gpsOn()) {
     if (!myAccuracyCircle) {
       myAccuracyCircle = L.circle([myPos.lat, myPos.lng], {
         radius: myPos.acc, stroke: false, fillColor: "#0f766e", fillOpacity: 0.12, interactive: false,
@@ -520,6 +616,7 @@ function renderList() {
   $("#emptyState").hidden = entries.length > 1;
 
   list.innerHTML = "";
+  const here = myLocation();
   for (const [id, m] of entries) {
     const isMe = id === state.memberId;
     const status = memberStatus(m, id);
@@ -528,6 +625,7 @@ function renderList() {
     const meta = [];
     if (isMe) {
       if (!state.sharing) meta.push("Đã tắt chia sẻ vị trí");
+      else if (!gpsOn()) meta.push(hasPos ? `Máy này chỉ xem · vị trí từ máy khác, ${relTime(now() - (m.updatedAt || 0))}` : "Máy này chỉ xem");
       else if (geoError) meta.push(geoError);
       else if (!myPos) meta.push("Đang tìm vị trí…");
       else meta.push("Đang chia sẻ vị trí");
@@ -537,7 +635,7 @@ function renderList() {
       meta.push("Chưa có vị trí");
     } else {
       meta.push(status === "on" ? "Đang mở app" : relTime(now() - (m.updatedAt || 0)));
-      if (myPos && state.sharing) meta.push(`cách ${formatDistance(distanceMeters(myPos, m))}`);
+      if (here) meta.push(`cách ${formatDistance(distanceMeters(here, m))}`);
     }
     if (!isMe && typeof m.battery === "number") {
       const low = m.battery <= 20 && !m.charging;
@@ -580,6 +678,7 @@ function updateStatus() {
   dot.className = "dot";
   if (!connected) { dot.classList.add("warn"); text.textContent = "Đang kết nối…"; return; }
   if (!state.sharing) { text.textContent = "Không chia sẻ vị trí"; return; }
+  if (!gpsOn()) { text.textContent = "Máy này chỉ xem"; return; }
   if (geoError) { dot.classList.add("warn"); text.textContent = "Chưa lấy được vị trí"; return; }
   if (!myPos) { dot.classList.add("warn"); text.textContent = "Đang tìm vị trí…"; return; }
   dot.classList.add("on");
@@ -629,14 +728,22 @@ function onGeoError(err) {
 }
 
 function pushPosition(force) {
-  if (!myPos || !state.sharing || !state.familyId) return;
+  // Chờ có dữ liệu nhóm: cần biết vị trí đang lưu để không ghi đè vị trí tốt hơn từ máy khác.
+  if (!myPos || !gpsOn() || !state.familyId || !membersLoaded) return;
   const t = Date.now();
   const moved = lastPush.lat === null ? Infinity : distanceMeters(lastPush, myPos);
   if (!force && moved < PUSH_MIN_METERS && t - lastPush.at < PUSH_MAX_SECONDS * 1000) return;
+
+  // Dùng nhiều máy: máy định vị kém (laptop đoán theo IP/wifi, lệch hàng km) không được
+  // ghi đè vị trí tốt mà điện thoại vừa gửi lên gần đây.
+  const stored = members[state.memberId];
+  if (myPos.acc > POOR_ACCURACY && typeof stored?.acc === "number" && stored.acc <= POOR_ACCURACY
+      && now() - (stored.updatedAt || 0) < GOOD_FIX_PROTECT) return;
+
   lastPush = { at: t, lat: myPos.lat, lng: myPos.lng };
   const data = {
     lat: +myPos.lat.toFixed(6), lng: +myPos.lng.toFixed(6), acc: myPos.acc,
-    updatedAt: fb.serverTimestamp(), sharing: true,
+    updatedAt: fb.serverTimestamp(),
     online: document.visibilityState === "visible",
   };
   if (battery) { data.battery = battery.level; data.charging = battery.charging; }
@@ -678,6 +785,10 @@ function bindMainUi() {
 
   $("#locateMe").addEventListener("click", () => {
     if (!state.sharing) return toast("Bạn đang tắt chia sẻ vị trí. Bật lại trong Cài đặt.");
+    if (!gpsOn()) {
+      const here = myLocation();
+      return here ? focusOn([here]) : toast("Máy này đang chỉ xem. Bật “Lấy vị trí từ máy này” trong Cài đặt.");
+    }
     if (!myPos) {
       startWatching();
       return toast(geoError || "Đang tìm vị trí của bạn…");
@@ -747,6 +858,7 @@ function openSettings() {
   draftAvatar = [state.emoji, state.color];
   renderAvatarGrid($("#settingsAvatarGrid"), state.emoji, (e, c) => { draftAvatar = [e, c]; });
   $("#shareToggle").checked = !!state.sharing;
+  $("#gpsToggle").checked = state.deviceGps !== false;
   $("#wakeToggle").checked = !!state.wake;
   $("#settingsDialog").showModal();
 }
@@ -754,10 +866,11 @@ function openSettings() {
 async function saveSettings() {
   const name = $("#settingsName").value.trim().slice(0, 24);
   if (!name) return toast("Tên không được để trống.");
-  const wasSharing = state.sharing;
+  const wasGps = gpsOn();
   state.name = name;
   [state.emoji, state.color] = draftAvatar;
-  state.sharing = $("#shareToggle").checked;
+  state.sharing = $("#shareToggle").checked;   // cấp người: áp dụng cho mọi máy của tôi
+  state.deviceGps = $("#gpsToggle").checked;   // cấp máy: chỉ máy này
   state.wake = $("#wakeToggle").checked;
   saveState();
 
@@ -765,8 +878,8 @@ async function saveSettings() {
   if (!state.sharing) Object.assign(patch, { lat: null, lng: null, acc: null });
   fb.update(meRef(), patch).catch(onWriteError);
 
-  if (state.sharing && !wasSharing) { lastPush = { at: 0, lat: null, lng: null }; startWatching(); }
-  if (!state.sharing && wasSharing) stopWatching();
+  if (gpsOn() && !wasGps) { lastPush = { at: 0, lat: null, lng: null }; startWatching(); }
+  if (!gpsOn() && wasGps) stopWatching();
   if (state.wake) requestWakeLock(); else releaseWakeLock();
 
   $("#settingsDialog").close();
@@ -834,7 +947,7 @@ async function boot() {
   if (kickedReason) {
     const msg = kickedReason === "banned"
       ? "Bạn không thể vào nhóm này nữa. Hãy liên hệ người trong nhà."
-      : "Bạn đã được xoá khỏi nhóm gia đình. Có thể vào lại bằng mã mời.";
+      : "Bạn không còn ở trong nhóm này (đã rời nhóm trên máy khác hoặc bị xoá). Có thể vào lại bằng mã mời.";
     setTimeout(() => toast(msg, 6000), 300);
   }
 
@@ -842,7 +955,7 @@ async function boot() {
     pendingInvite = invited;
     startOnboarding();
   } else if (state.familyId && state.name && state.emoji) {
-    enterMain(state.sharing);
+    enterMain();
     if (openInviteAfter) {
       setTimeout(() => { openInvite(); toast("Đã tạo mã nhóm mới ✓ Gửi lời mời cho người nhà nhé."); }, 600);
     }
