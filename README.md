@@ -41,6 +41,18 @@ Trên GitHub: **Settings → Pages → Source: Deploy from a branch → `main` /
 - **Android (Chrome):** mở link → menu ⋮ → **Thêm vào màn hình chính**.
 - **iPhone (Safari):** mở link → nút Chia sẻ → **Thêm vào MH chính**.
 
+### 5. (Khuyên dùng) Bật App Check chống bot
+App Check bắt mọi request tới database phải đến từ chính trang web này, nên script dùng API key bị lộ sẽ bị chặn. Dùng **reCAPTCHA Enterprise** dạng score-based: chạy ngầm, người dùng không phải bấm gì. Miễn phí 10.000 lượt kiểm tra/tháng — dư cho một gia đình. (reCAPTCHA v3 “classic” đã bị Firebase ngừng nhận đăng ký mới.)
+
+1. Google Cloud Console (project `nha-minh-7ef58`) → **Security → reCAPTCHA** → bật API nếu được hỏi → **Create key**: loại **Website**, domain `hung-aihello.github.io`, **không** bật checkbox challenge → copy **Key ID**.
+2. Firebase Console → **App Check → Apps** → mở web app → **reCAPTCHA Enterprise** → dán Key ID → đặt **Token TTL = 1 ngày** (giảm số lượt kiểm tra) → Save.
+3. Dán Key ID vào `appCheckSiteKey` trong `config.js` → push.
+4. Đợi 1–2 ngày, xem **App Check → APIs → Realtime Database**: khi gần như 100% request là *Verified* thì bấm **Enforce**.
+
+> ⚠️ Chỉ Enforce **Realtime Database**. Đừng Enforce Firestore/Storage nếu app khác dùng chung project mà chưa tích hợp App Check — app đó sẽ bị chặn.
+
+Chạy trên `localhost`: console in ra *App Check debug token* → thêm vào **App Check → Apps → ⋮ → Manage debug tokens**.
+
 ## Chạy thử trên máy
 Định vị chỉ hoạt động trên `https://` hoặc `localhost`:
 ```bash

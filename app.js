@@ -1,4 +1,4 @@
-import { firebaseConfig } from "./config.js";
+import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -128,7 +128,23 @@ async function loadFirebase() {
     import(`${FIREBASE_SDK}firebase-database.js`),
   ]);
   const app = initializeApp(firebaseConfig);
+  await initAppCheck(app); // phải chạy trước khi dùng database
   fb = { ...rtdb, db: rtdb.getDatabase(app) };
+}
+
+// App Check: chứng minh request đến từ chính trang web này (không phải script/bot dùng key bị lộ).
+// reCAPTCHA Enterprise (score-based) chạy ngầm, người dùng không phải bấm gì. Chưa có site key thì bỏ qua.
+// (reCAPTCHA v3 "classic" đã bị Firebase ngừng nhận đăng ký mới.)
+async function initAppCheck(app) {
+  if (!appCheckSiteKey) return;
+  try {
+    // Trên máy dev, Firebase in ra "debug token" trong console để đăng ký ở Firebase Console.
+    if (["localhost", "127.0.0.1"].includes(location.hostname)) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import(`${FIREBASE_SDK}firebase-app-check.js`);
+    initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+  } catch (e) {
+    console.warn("Không khởi tạo được App Check:", e);
+  }
 }
 const famRef = (path = "") => fb.ref(fb.db, `families/${state.familyId}${path ? "/" + path : ""}`);
 const meRef = () => famRef(`members/${state.memberId}`);

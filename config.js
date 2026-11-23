@@ -9,3 +9,7 @@ export const firebaseConfig = {
   projectId: "nha-minh-7ef58",
   appId: "1:308295627015:web:73402381b3015e93df55a2",
 };
+
+// Site key reCAPTCHA Enterprise (score-based) cho Firebase App Check (công khai, không phải bí mật).
+// Để trống "" thì app chạy không có App Check.
+export const appCheckSiteKey = "6LdFvi0uAAAAADOawbwEZC7gyiJa1jNY8pitxluF";
