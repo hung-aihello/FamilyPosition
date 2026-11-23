@@ -126,6 +126,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.9.4 | 23/11/2026 | Dây nối ghim ↔ vị trí thật dễ nhận ra hơn: dây dày, màu xanh đậm có viền sáng; chấm vị trí thật to hơn với vòng đậm bao ngoài; dây nằm ở lớp riêng dưới mọi ghim nên không vắt ngang nhãn tên người khác |
 | 1.9.3 | 23/11/2026 | Sửa lỗi zoom bản đồ làm sai vị trí tương đối giữa mọi người: ghim chồng nhau giờ được đẩy ra vừa đủ theo đúng hướng thật (ai ở bắc vẫn nằm trên, ai ở tây vẫn nằm trái) thay vì bị dàn thành một hàng ngang; ghim bị đẩy có chấm + dây nối về vị trí thật; ghim dàn lại mượt cùng lúc với hiệu ứng zoom |
 | 1.9.2 | 23/11/2026 | Bảng danh sách trên bản đồ kéo mượt như app: đi theo ngón tay, 3 nấc (thu gọn / nửa / toàn màn hình), hất nhanh để chuyển nấc, lực cản dây thun, nhường cuộn danh sách; nút nổi đi theo và tự ẩn khi bảng full; dòng ghi công OSM không còn đè lên danh sách |
 | 1.9.1 | 23/11/2026 | Vuốt xuống để đóng hộp thoại (trên điện thoại): hộp đi theo ngón tay, kéo đủ xa hoặc hất nhanh thì đóng, không thì bật về; không ảnh hưởng cuộn nội dung và khung căn ảnh |

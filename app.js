@@ -1,7 +1,7 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.9.3";
+const APP_VERSION = "1.9.4";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -622,6 +622,10 @@ function initMap() {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
   map.attributionControl.setPrefix(false);
+  // Lớp dây nối ghim ↔ vị trí thật: ngay dưới lớp ghim (600) để dây không đè lên ghim/nhãn tên.
+  const tetherPane = map.createPane("tethers");
+  tetherPane.style.zIndex = 590;
+  tetherPane.style.pointerEvents = "none";
   map.on("dragstart", () => { userMovedMap = true; });
   map.on("zoomanim", (e) => relayoutPinsFor(e.zoom)); // ghim dàn lại cùng lúc với hiệu ứng zoom
   map.on("zoomend", () => renderMarkers()); // tách các ghim chồng lên nhau theo mức zoom
@@ -832,8 +836,10 @@ function renderMarkers() {
     const cls = `pin${isMe ? " me" : ""}${live ? " live" : ""}${stale ? " stale" : ""}${selectedId === m.id ? " selected" : ""}`;
     const html = `<div class="${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
       <div class="pin-bubble">${avatarInner(m, m.id)}</div>
-      <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div></div>
-      <div class="pin-tether" style="--c:${escapeHtml(m.color || "#ccfbf1")}"></div>`;
+      <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div></div>`;
+    // Dây nối nằm ở lớp riêng dưới mọi ghim, để không vắt ngang nhãn tên của người khác.
+    const tetherHtml = `<div class="pin-tether" style="--c:${escapeHtml(m.color || "#ccfbf1")}"></div>`;
+    const tetherIcon = () => L.divIcon({ html: tetherHtml, className: "", iconSize: [0, 0], iconAnchor: [0, 0] });
     let entry = markers.get(m.id);
     if (!entry) {
       const marker = L.marker([m.lat, m.lng], {
@@ -841,7 +847,8 @@ function renderMarkers() {
         keyboard: true, title: m.name, zIndexOffset: isMe ? 1000 : 0,
       }).addTo(map);
       marker.on("click", (e) => { L.DomEvent.stopPropagation(e); openDetail(m.id); });
-      entry = { marker, html, target: [m.lat, m.lng] };
+      const tether = L.marker([m.lat, m.lng], { icon: tetherIcon(), pane: "tethers", interactive: false, keyboard: false }).addTo(map);
+      entry = { marker, tether, html, tetherHtml, target: [m.lat, m.lng] };
       markers.set(m.id, entry);
       applyPinOffset(entry, offsets.get(m.id)); // đặt trước animation "drop" để ghim không trượt từ 0
       playOnce(marker.getElement()?.firstElementChild, "drop", (dropIndex++ % 8) * 90);
@@ -852,11 +859,12 @@ function renderMarkers() {
         entry.marker.setIcon(L.divIcon({ html, className: "", iconSize: [56, 66], iconAnchor: [28, 66] }));
         entry.html = html;
       }
+      if (entry.tetherHtml !== tetherHtml) { entry.tether.setIcon(tetherIcon()); entry.tetherHtml = tetherHtml; }
     }
     applyPinOffset(entry, offsets.get(m.id));
   }
   for (const [id, entry] of markers) {
-    if (!seen.has(id)) { cancelAnimationFrame(entry.raf); entry.marker.remove(); markers.delete(id); }
+    if (!seen.has(id)) { cancelAnimationFrame(entry.raf); entry.marker.remove(); entry.tether.remove(); markers.delete(id); }
   }
 
   if (myPos && gpsOn()) {
@@ -927,14 +935,13 @@ function layoutPins(located, zoom) {
 
 // Đặt độ lệch lên ghim bằng biến CSS (không dựng lại HTML → ảnh không chớp, ghim trượt mượt).
 function applyPinOffset(entry, d) {
-  const el = entry.marker.getElement();
-  const pin = el?.querySelector(".pin");
-  if (!pin) return;
+  const pin = entry.marker.getElement()?.querySelector(".pin");
+  const tether = entry.tether.getElement()?.querySelector(".pin-tether");
+  if (!pin || !tether) return;
   d = d || { x: 0, y: 0 };
   entry.off = d;
   pin.style.setProperty("--dx", `${d.x}px`);
   pin.style.setProperty("--dy", `${d.y}px`);
-  const tether = el.querySelector(".pin-tether");
   const len = Math.hypot(d.x, d.y);
   tether.classList.toggle("on", len > 2);
   tether.style.setProperty("--len", `${len}px`);
@@ -978,11 +985,12 @@ function slideMarker(entry, to) {
   cancelAnimationFrame(entry.raf);
   const from = entry.marker.getLatLng();
   const far = from.distanceTo(to) > 5000 || !map.getBounds().pad(0.5).contains(from);
-  if (reducedMotion() || far || document.visibilityState !== "visible") { entry.marker.setLatLng(to); return; }
+  const place = (ll) => { entry.marker.setLatLng(ll); entry.tether.setLatLng(ll); }; // dây nối đi cùng ghim
+  if (reducedMotion() || far || document.visibilityState !== "visible") { place(to); return; }
   const t0 = performance.now(), D = 1000;
   const step = (t) => {
     const k = Math.min(1, (t - t0) / D), e = 1 - (1 - k) ** 3;
-    entry.marker.setLatLng([from.lat + (to[0] - from.lat) * e, from.lng + (to[1] - from.lng) * e]);
+    place([from.lat + (to[0] - from.lat) * e, from.lng + (to[1] - from.lng) * e]);
     if (k < 1) entry.raf = requestAnimationFrame(step);
   };
   entry.raf = requestAnimationFrame(step);
