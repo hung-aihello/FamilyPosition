@@ -1,7 +1,8 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
+import { sound } from "./sound.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.9.4";
+const APP_VERSION = "1.10.0";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -48,6 +49,8 @@ function loadState() {
   if (!s.memberId) s.memberId = randomString(16, "abcdefghijklmnopqrstuvwxyz0123456789");
   if (s.sharing === undefined) s.sharing = true;     // chia sẻ vị trí — cấp NGƯỜI (đồng bộ giữa các máy)
   if (s.deviceGps === undefined) s.deviceGps = true; // lấy GPS từ máy này — cấp MÁY
+  if (s.sfx === undefined) s.sfx = true;             // âm thanh hiệu ứng — cấp MÁY
+  if (s.music === undefined) s.music = true;         // nhạc nền — cấp MÁY
   // Hàng đợi rời nhóm lưu cặp {f: mã nhóm, m: id}; bản trước chỉ lưu mã nhóm.
   s.leaveQueue = (s.leaveQueue || []).map((x) => (typeof x === "string" ? { f: x, m: s.memberId } : x));
   return s;
@@ -150,12 +153,46 @@ function renderAvatarGrid(container, selected, onPick) {
 }
 
 function setupDialogs() {
+  // Hộp thoại mở/đóng (bằng bất cứ cách nào) → tiếng "vút" lên/xuống
+  const swoosh = new MutationObserver((list) => {
+    for (const r of list) (r.target.open ? sound.open : sound.close)();
+  });
   for (const d of $$("dialog")) {
     d.addEventListener("click", (e) => {
       if (e.target === d || e.target.closest("[data-close]")) d.close();
     });
     bindSwipeToClose(d);
+    swoosh.observe(d, { attributes: true, attributeFilter: ["open"] });
   }
+}
+
+/* ---- Âm thanh ---- */
+// Chạm vào bất cứ thứ gì bấm được → tiếng "pụp" nhẹ (nút nào có âm riêng thì âm riêng thay thế).
+const TAPPABLE = "button, a.btn, .choice, [role=radio], input[type=checkbox], .leaflet-marker-icon";
+function bindTapSound() {
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest?.(TAPPABLE);
+    if (el && !el.disabled) sound.tap();
+  }, true);
+}
+function setSfx(on) {
+  state.sfx = !!on;
+  saveState();
+  sound.setSfx(state.sfx);
+  if (on) sound.success();
+}
+function setMusic(on) {
+  state.music = !!on;
+  saveState();
+  sound.setMusic(state.music);
+  renderMusicBtn();
+  const t = $("#musicToggle");
+  if (t) t.checked = state.music;
+}
+function renderMusicBtn() {
+  const b = $("#musicBtn");
+  b.setAttribute("aria-pressed", String(!!state.music));
+  b.setAttribute("aria-label", state.music ? "Tắt nhạc nền" : "Bật nhạc nền");
 }
 
 // Trên điện thoại hộp thoại là "bảng" trượt từ dưới lên → vuốt xuống để đóng.
@@ -419,6 +456,7 @@ function showCodeError(msg) {
   const el = $("#codeError");
   el.textContent = msg;
   el.hidden = false;
+  sound.error();
 }
 
 async function joinFamily(code, btn) {
@@ -513,6 +551,7 @@ async function enterMain(opts = {}) {
   if (welcome) {
     setTimeout(() => {
       burst(innerWidth / 2, innerHeight * 0.35, ["🎉", "🏡", "💛", "✨", "🥳"], 34);
+      sound.welcome();
       toast("Chào mừng về Nhà Mình! 🏡", 3500);
     }, 900);
   }
@@ -781,6 +820,7 @@ function showLive(e) {
   box.classList.remove("out");
   box.hidden = false;
   buzz([30, 60, 30]);
+  if (e.type === "arrive") sound.arrive(home); else sound.leave();
   if (e.type === "arrive") {
     requestAnimationFrame(() => {
       const r = box.getBoundingClientRect();
@@ -1124,6 +1164,7 @@ function renderPlaceHint() {
 
 function openDetail(id) {
   buzz();
+  sound.select();
   selectedId = id;
   renderDetail();
   if (sheetMode === "peek") setSheetMode("half");
@@ -1478,6 +1519,7 @@ function savePlace() {
   };
   fb.set(famRef(`places/${id}`), data).catch(onWriteError);
   buzz(15);
+  sound.success(true);
   toast(`Đã lưu ${placing.emoji} ${name} ✓`);
   const ch = $("#crosshair").getBoundingClientRect();
   burst(ch.left + ch.width / 2, ch.top, [placing.emoji, "✨", "💛", "🎉"]);
@@ -1492,10 +1534,12 @@ function deletePlace() {
     btn.dataset.armed = "1";
     btn.textContent = "Chạm lần nữa để xoá";
     buzz(20);
+    sound.warn();
     return;
   }
   const pl = places[placing.id];
   fb.remove(famRef(`places/${placing.id}`)).catch(onWriteError);
+  sound.remove();
   toast(`Đã xoá ${pl?.emoji || ""} ${pl?.name || "địa điểm"}`);
   stopPlacing();
 }
@@ -1621,6 +1665,7 @@ function releaseWakeLock() {
  * Kéo từ trong danh sách: đang ở đầu danh sách mà vuốt xuống → thu bảng; vuốt lên khi chưa full → mở rộng;
  * còn lại là cuộn danh sách như thường. Trên máy tính bảng là cột bên trái → chỉ bấm để thu/mở. */
 let sheetMode = "half";
+const SHEET_ORDER = ["peek", "half", "full"];
 
 function sheetMetrics() {
   const sheet = $("#sheet"), body = $("#sheetBody");
@@ -1736,7 +1781,7 @@ function bindSheetGestures() {
     } else {
       [mode] = nearest(snaps, h - v * 220); // kéo chậm: nấc gần chỗ thả nhất (có tính quán tính)
     }
-    if (mode !== sheetMode) buzz();
+    if (mode !== sheetMode) { buzz(); sound.snap(SHEET_ORDER.indexOf(mode) > SHEET_ORDER.indexOf(sheetMode)); }
     setSheetMode(mode);
   };
 
@@ -1760,6 +1805,7 @@ function bindSheetGestures() {
   handle.addEventListener("click", () => {
     if (suppressClick) return;
     buzz();
+    sound.snap(sheetMode === "peek");
     setSheetMode(sheetMode === "peek" ? "half" : "peek");
   });
 
@@ -1792,7 +1838,7 @@ function bindMainUi() {
   map.on("moveend", () => $("#crosshair").classList.remove("lift"));
   new ResizeObserver(() => { if (placing) updatePreview(); }).observe($("#placePanel"));
 
-  $("#detailBack").addEventListener("click", () => { buzz(); closeDetail(); });
+  $("#detailBack").addEventListener("click", () => { buzz(); sound.back(); closeDetail(); });
   $("#detailShare").addEventListener("click", () => selectedId && shareLocationOf(selectedId));
   $("#detailSavePlace").addEventListener("click", () => {
     const m = selectedId && allMembers()[selectedId];
@@ -1842,6 +1888,15 @@ function bindMainUi() {
   $("#copyLink").addEventListener("click", copyLink);
 
   $("#saveSettings").addEventListener("click", saveSettings);
+  // Âm thanh: áp dụng ngay khi gạt (cài đặt riêng của máy này, không cần bấm Lưu)
+  $("#sfxToggle").addEventListener("change", (e) => setSfx(e.currentTarget.checked));
+  $("#musicToggle").addEventListener("change", (e) => setMusic(e.currentTarget.checked));
+  $("#musicBtn").addEventListener("click", () => {
+    buzz();
+    setMusic(!state.music);
+    toast(state.music ? "🎵 Đã bật nhạc nền" : "🔇 Đã tắt nhạc nền");
+  });
+  renderMusicBtn();
   // Ảnh đại diện
   const pick = () => $("#photoInput").click();
   $("#pickPhoto").addEventListener("click", pick);
@@ -1877,6 +1932,7 @@ function openInvite() {
 async function copyLink() {
   try {
     await navigator.clipboard.writeText(inviteUrl());
+    sound.success();
     toast("Đã sao chép đường dẫn mời ✓");
   } catch {
     prompt("Sao chép đường dẫn này:", inviteUrl());
@@ -2084,6 +2140,8 @@ function openSettings() {
   $("#shareToggle").checked = !!state.sharing;
   $("#gpsToggle").checked = state.deviceGps !== false;
   $("#wakeToggle").checked = !!state.wake;
+  $("#sfxToggle").checked = state.sfx !== false;
+  $("#musicToggle").checked = state.music !== false;
   $("#settingsDialog").showModal();
 }
 
@@ -2112,6 +2170,7 @@ async function saveSettings() {
   updateStatus();
   render();
   toast("Đã lưu ✓");
+  sound.success(photoChanged);
   if (photoChanged) burst(innerWidth / 2, innerHeight * 0.45, ["📸", "✨", "💖", "🌟"]);
 }
 
@@ -2146,6 +2205,9 @@ async function rekeyFamily() {
 /* ------------------------------------------------------------------ */
 async function boot() {
   setupDialogs();
+  sound.setSfx(state.sfx);
+  sound.setMusic(state.music);
+  bindTapSound();
 
   const configured = firebaseConfig?.databaseURL && !/YOUR_/.test(firebaseConfig.databaseURL + firebaseConfig.apiKey);
   if (!configured) { showScreen("setupNeeded"); return; }
@@ -2178,6 +2240,7 @@ async function boot() {
     setTimeout(() => toast(msg, 6000), 300);
   }
 
+  sound.hello(); // trình duyệt chưa cho phát thì đợi tới lần chạm đầu tiên
   if (invited && invited !== state.familyId) {
     pendingInvite = invited;
     startOnboarding();

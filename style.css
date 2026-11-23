@@ -821,3 +821,11 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
   #map .leaflet-bottom { bottom: var(--sheet-h, 0px); }
   #main.sheet-moving #map .leaflet-bottom { transition: none; }
 }
+
+/* Nút bật/tắt nhạc nền: đang phát thì nốt nhạc nhún nhảy theo nhịp, tắt thì có gạch chéo */
+.music-fab .mute { display: none; }
+.music-fab[aria-pressed="false"] .mute { display: inline; }
+.music-fab[aria-pressed="false"] svg { stroke: var(--text-muted); }
+.music-fab[aria-pressed="true"] svg { stroke: var(--primary); animation: music-bob 1.67s ease-in-out infinite; }
+@keyframes music-bob { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-2px) rotate(-6deg); } 75% { transform: translateY(-1px) rotate(5deg); } }
+@media (prefers-reduced-motion: reduce) { .music-fab svg { animation: none !important; } }

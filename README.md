@@ -126,6 +126,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.10.0 | 23/11/2026 | Âm thanh: lời chào khi mở app (và khi quay lại sau hơn 1 phút), tiếng "pụp" khi chạm, "vút" khi mở/đóng hộp thoại, chuông "kính coong" khi người thân về Nhà, chuông khi đến/rời địa điểm, lấp lánh khi lưu; nhạc nền hộp nhạc tự sáng tác (không lặp lại), tự tắt khi rời app. Nút 🎵 trên bản đồ để bật/tắt nhạc nhanh; Cài đặt có công tắc riêng cho âm thanh và nhạc nền (riêng từng máy). Tự tổng hợp bằng Web Audio, không cần tải file. Trên iPhone âm thanh theo nút gạt im lặng và không cắt nhạc đang nghe |
 | 1.9.4 | 23/11/2026 | Dây nối ghim ↔ vị trí thật dễ nhận ra hơn: dây dày, màu xanh đậm có viền sáng; chấm vị trí thật to hơn với vòng đậm bao ngoài; dây nằm ở lớp riêng dưới mọi ghim nên không vắt ngang nhãn tên người khác |
 | 1.9.3 | 23/11/2026 | Sửa lỗi zoom bản đồ làm sai vị trí tương đối giữa mọi người: ghim chồng nhau giờ được đẩy ra vừa đủ theo đúng hướng thật (ai ở bắc vẫn nằm trên, ai ở tây vẫn nằm trái) thay vì bị dàn thành một hàng ngang; ghim bị đẩy có chấm + dây nối về vị trí thật; ghim dàn lại mượt cùng lúc với hiệu ứng zoom |
 | 1.9.2 | 23/11/2026 | Bảng danh sách trên bản đồ kéo mượt như app: đi theo ngón tay, 3 nấc (thu gọn / nửa / toàn màn hình), hất nhanh để chuyển nấc, lực cản dây thun, nhường cuộn danh sách; nút nổi đi theo và tự ẩn khi bảng full; dòng ghi công OSM không còn đè lên danh sách |
