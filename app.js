@@ -1,7 +1,7 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.9.2";
+const APP_VERSION = "1.9.3";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -623,6 +623,7 @@ function initMap() {
   }).addTo(map);
   map.attributionControl.setPrefix(false);
   map.on("dragstart", () => { userMovedMap = true; });
+  map.on("zoomanim", (e) => relayoutPinsFor(e.zoom)); // ghim dàn lại cùng lúc với hiệu ứng zoom
   map.on("zoomend", () => renderMarkers()); // tách các ghim chồng lên nhau theo mức zoom
   map.on("click", () => { if (selectedId && !placing) closeDetail(); });
   map.on("move", () => { if (placing) updatePreview(); });
@@ -820,7 +821,7 @@ const avatarHtml = (m, id, cls = "") =>
 function renderMarkers() {
   const located = locatedMembers().sort((a, b) => a.id.localeCompare(b.id));
 
-  const dx = layoutPins(located);
+  const offsets = layoutPins(located);
 
   const seen = new Set();
   for (const m of located) {
@@ -829,9 +830,10 @@ function renderMarkers() {
     const stale = !isMe && now() - (m.updatedAt || 0) > IDLE_WINDOW;
     const live = !isMe && memberStatus(m, m.id) === "on";
     const cls = `pin${isMe ? " me" : ""}${live ? " live" : ""}${stale ? " stale" : ""}${selectedId === m.id ? " selected" : ""}`;
-    const html = `<div class="${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")};--dx:${dx.get(m.id) || 0}px">
+    const html = `<div class="${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
       <div class="pin-bubble">${avatarInner(m, m.id)}</div>
-      <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div></div>`;
+      <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div></div>
+      <div class="pin-tether" style="--c:${escapeHtml(m.color || "#ccfbf1")}"></div>`;
     let entry = markers.get(m.id);
     if (!entry) {
       const marker = L.marker([m.lat, m.lng], {
@@ -839,9 +841,10 @@ function renderMarkers() {
         keyboard: true, title: m.name, zIndexOffset: isMe ? 1000 : 0,
       }).addTo(map);
       marker.on("click", (e) => { L.DomEvent.stopPropagation(e); openDetail(m.id); });
-      playOnce(marker.getElement()?.firstElementChild, "drop", (dropIndex++ % 8) * 90);
       entry = { marker, html, target: [m.lat, m.lng] };
       markers.set(m.id, entry);
+      applyPinOffset(entry, offsets.get(m.id)); // đặt trước animation "drop" để ghim không trượt từ 0
+      playOnce(marker.getElement()?.firstElementChild, "drop", (dropIndex++ % 8) * 90);
     } else {
       slideMarker(entry, [m.lat, m.lng]);
       entry.marker.getElement()?.setAttribute("title", m.name);
@@ -850,6 +853,7 @@ function renderMarkers() {
         entry.html = html;
       }
     }
+    applyPinOffset(entry, offsets.get(m.id));
   }
   for (const [id, entry] of markers) {
     if (!seen.has(id)) { cancelAnimationFrame(entry.raf); entry.marker.remove(); markers.delete(id); }
@@ -876,38 +880,71 @@ const labelWidth = (text) => Math.min(110, Math.round(String(text).length * 7.6)
 const boxesHit = (a, b) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
 let pinBoxes = []; // khung chiếm chỗ của từng ghim (toạ độ màn hình), dùng để đặt nhãn địa điểm
 
-// Ghim nào đụng nhau (tính cả bong bóng lẫn nhãn tên) thì gom nhóm rồi dàn hàng ngang,
-// căn giữa quanh vị trí trung bình. Trả về độ lệch ngang (px) của từng ghim.
-function layoutPins(located) {
-  const items = located.map((m) => ({
-    id: m.id,
-    p: map.latLngToContainerPoint([m.lat, m.lng]),
-    w: Math.max(PIN_W, labelWidth(m.id === state.memberId ? "Tôi" : m.name)),
-  })).sort((a, b) => a.p.x - b.p.x || a.id.localeCompare(b.id));
-  const near = (a, b) => Math.abs(a.p.x - b.p.x) < (a.w + b.w) / 2 + PIN_GAP && Math.abs(a.p.y - b.p.y) < PIN_H + PIN_LABEL_H;
+// Ghim nào đụng nhau (tính cả bong bóng lẫn nhãn tên) thì đẩy nhau ra vừa đủ, theo đúng hướng
+// của vị trí thật: ai ở phía bắc vẫn nằm trên, ai ở phía tây vẫn nằm trái — nên khi zoom,
+// thứ tự tương đối giữa mọi người không bị đảo. Ghim bị đẩy có chấm + dây nối về chỗ thật.
+// `zoom` (tuỳ chọn): tính trước bố cục cho mức zoom sắp tới (lúc bản đồ đang chạy hiệu ứng zoom).
+// Trả về độ lệch {x, y} (px) của từng ghim.
+function layoutPins(located, zoom) {
+  const H = PIN_H + PIN_LABEL_H;
+  const items = located.map((m) => {
+    const p = zoom == null ? map.latLngToContainerPoint([m.lat, m.lng]) : map.project([m.lat, m.lng], zoom);
+    return { id: m.id, p, x: p.x, y: p.y, w: Math.max(PIN_W, labelWidth(m.id === state.memberId ? "Tôi" : m.name)) };
+  }).sort((a, b) => a.id.localeCompare(b.id));
 
-  let groups = [];
-  for (const it of items) {
-    const hit = groups.filter((g) => g.some((o) => near(o, it)));
-    groups = groups.filter((g) => !hit.includes(g));
-    groups.push([...hit.flat(), it]);
-  }
-
-  const dx = new Map();
-  pinBoxes = [];
-  for (const g of groups) {
-    g.sort((a, b) => a.p.x - b.p.x || a.id.localeCompare(b.id));
-    const total = g.reduce((s, it) => s + it.w, 0) + PIN_GAP * (g.length - 1);
-    let x = g.reduce((s, it) => s + it.p.x, 0) / g.length - total / 2;
-    for (const it of g) {
-      const cx = g.length > 1 ? x + it.w / 2 : it.p.x;
-      const off = Math.round((cx - it.p.x) / 2) * 2; // làm tròn để ghim không bị vẽ lại vì lệch 1 px
-      dx.set(it.id, off);
-      pinBoxes.push({ x1: it.p.x + off - it.w / 2, x2: it.p.x + off + it.w / 2, y1: it.p.y - PIN_H, y2: it.p.y + PIN_LABEL_H });
-      x += it.w + PIN_GAP;
+  // Gỡ chồng lấn từng cặp, lặp tới khi hết (cả nhà chỉ vài người nên rất nhẹ).
+  for (let iter = 0; iter < 80; iter++) {
+    let moved = false;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const a = items[i], b = items[j];
+        const ox = (a.w + b.w) / 2 + PIN_GAP - Math.abs(b.x - a.x);
+        const oy = H + PIN_GAP - Math.abs(b.y - a.y);
+        if (ox <= 0.5 || oy <= 0.5) continue;
+        moved = true;
+        // Tách theo trục chồng ít hơn; chiều đẩy theo vị trí thật (cùng chỗ thì xếp theo id, hàng ngang).
+        if (ox <= oy) {
+          const s = Math.sign(b.p.x - a.p.x) || Math.sign(b.x - a.x) || 1;
+          a.x -= (s * ox) / 2; b.x += (s * ox) / 2;
+        } else {
+          const s = Math.sign(b.p.y - a.p.y) || Math.sign(b.y - a.y) || 1;
+          a.y -= (s * oy) / 2; b.y += (s * oy) / 2;
+        }
+      }
     }
+    if (!moved) break;
   }
-  return dx;
+
+  const off = new Map();
+  if (zoom == null) pinBoxes = [];
+  for (const it of items) {
+    const d = { x: Math.round(it.x - it.p.x), y: Math.round(it.y - it.p.y) };
+    off.set(it.id, d);
+    if (zoom == null) pinBoxes.push({ x1: it.x - it.w / 2, x2: it.x + it.w / 2, y1: it.y - PIN_H, y2: it.y + PIN_LABEL_H });
+  }
+  return off;
+}
+
+// Đặt độ lệch lên ghim bằng biến CSS (không dựng lại HTML → ảnh không chớp, ghim trượt mượt).
+function applyPinOffset(entry, d) {
+  const el = entry.marker.getElement();
+  const pin = el?.querySelector(".pin");
+  if (!pin) return;
+  d = d || { x: 0, y: 0 };
+  entry.off = d;
+  pin.style.setProperty("--dx", `${d.x}px`);
+  pin.style.setProperty("--dy", `${d.y}px`);
+  const tether = el.querySelector(".pin-tether");
+  const len = Math.hypot(d.x, d.y);
+  tether.classList.toggle("on", len > 2);
+  tether.style.setProperty("--len", `${len}px`);
+  tether.style.setProperty("--ang", `${Math.atan2(d.y, d.x)}rad`);
+}
+
+// Trong lúc bản đồ đang zoom: tính sẵn bố cục cho mức zoom đích để ghim trượt cùng lúc.
+function relayoutPinsFor(zoom) {
+  const off = layoutPins(locatedMembers().filter((m) => markers.has(m.id)), zoom);
+  for (const [id, entry] of markers) applyPinOffset(entry, off.get(id));
 }
 
 // Nhãn địa điểm: thử đặt ở mép trên → dưới → phải → trái vòng tròn, chỗ nào không bị ghim che.

@@ -405,7 +405,19 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .place-who span { width: 24px; height: 24px; margin-right: -6px; display: grid; place-items: center; font-size: 13px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 2px var(--surface-2); }
 
 /* ---------- Map markers ---------- */
-.pin { position: relative; width: 56px; height: 66px; transform: translateX(var(--dx, 0px)); transition: transform .3s ease; }
+.pin { position: relative; z-index: 1; width: 56px; height: 66px; transform: translate(var(--dx, 0px), var(--dy, 0px)); transition: transform .3s ease; }
+/* Ghim bị đẩy ra cho khỏi chồng: chấm ở vị trí thật + dây nối tới mũi ghim */
+.pin-tether {
+  position: absolute; left: 28px; top: 66px; width: var(--len, 0px); height: 2px; margin-top: -1px;
+  transform-origin: 0 50%; rotate: var(--ang, 0rad);
+  background: rgba(28, 25, 23, .45); pointer-events: none;
+  opacity: 0; transition: opacity .2s ease, width .3s ease, rotate .3s ease;
+}
+.pin-tether.on { opacity: 1; }
+.pin-tether::before {
+  content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--c); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); box-sizing: border-box;
+}
 .pin.selected .pin-bubble { border-color: var(--primary); transform: scale(1.1); }
 .pin-bubble { transition: transform .2s ease; }
 .pin-bubble {
