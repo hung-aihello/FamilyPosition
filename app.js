@@ -1,7 +1,7 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.9.1";
+const APP_VERSION = "1.9.2";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -633,6 +633,9 @@ function observeSheet() {
   const apply = () => {
     const h = isDesktop() ? 0 : sheet.getBoundingClientRect().height;
     $("#main").style.setProperty("--sheet-h", `${h}px`);
+    // Bảng kéo lên gần hết màn hình → không còn chỗ cho 2 nút nổi: ẩn đi thay vì để đè lên thanh trên cùng
+    const room = innerHeight - h - $(".topbar").getBoundingClientRect().bottom;
+    $("#main").classList.toggle("fabs-hidden", !isDesktop() && room < 140);
   };
   new ResizeObserver(apply).observe(sheet);
   addEventListener("resize", apply);
@@ -1077,9 +1080,8 @@ function renderPlaceHint() {
 function openDetail(id) {
   buzz();
   selectedId = id;
-  $("#sheet").classList.remove("collapsed");
-  $("#sheetHandle").setAttribute("aria-expanded", "true");
   renderDetail();
+  if (sheetMode === "peek") setSheetMode("half");
   renderMarkers();
   const m = allMembers()[id];
   if (m && m.sharing !== false && typeof m.lat === "number") {
@@ -1567,29 +1569,157 @@ function releaseWakeLock() {
 /* ------------------------------------------------------------------ */
 /* Main UI bindings                                                    */
 /* ------------------------------------------------------------------ */
-function setSheetCollapsed(collapsed) {
-  $("#sheet").classList.toggle("collapsed", collapsed);
-  $("#sheetHandle").setAttribute("aria-expanded", String(!collapsed));
+/* ---- Bảng danh sách kéo được (điện thoại) ----
+ * 3 nấc: "peek" (chỉ tiêu đề) · "half" (mặc định, tối đa 48% màn hình) · "full" (gần hết màn hình,
+ * chỉ có khi danh sách dài hơn nấc half). Bảng đi theo ngón tay; thả ra thì trượt (có nảy nhẹ) tới
+ * nấc gần nhất theo hướng + tốc độ vuốt. Kéo quá hai đầu thì có lực cản kiểu dây thun.
+ * Kéo từ trong danh sách: đang ở đầu danh sách mà vuốt xuống → thu bảng; vuốt lên khi chưa full → mở rộng;
+ * còn lại là cuộn danh sách như thường. Trên máy tính bảng là cột bên trái → chỉ bấm để thu/mở. */
+let sheetMode = "half";
+
+function sheetMetrics() {
+  const sheet = $("#sheet"), body = $("#sheetBody");
+  const headH = sheet.querySelector(".sheet-head").offsetHeight;
+  const pad = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
+  const natural = headH + body.scrollHeight + pad;
+  const topLimit = $(".topbar").getBoundingClientRect().bottom + 10; // chừa thanh trên cùng
+  const peek = headH + pad + 4;
+  const half = Math.max(peek, Math.min(natural, innerHeight * 0.48));
+  const full = Math.min(natural, innerHeight - topLimit);
+  return { peek, half, full: full > half + 40 ? full : null };
 }
 
-// Tay cầm của danh sách: chạm để mở/thu gọn, hoặc vuốt lên/xuống.
+function setSheetMode(mode, animate = true) {
+  const sheet = $("#sheet"), main = $("#main");
+  if (isDesktop()) {
+    sheetMode = mode === "peek" ? "peek" : "half";
+    sheet.style.height = "";
+    sheet.classList.toggle("collapsed", sheetMode === "peek");
+    $("#sheetHandle").setAttribute("aria-expanded", String(sheetMode !== "peek"));
+    return;
+  }
+  const m = sheetMetrics();
+  if (mode === "full" && !m.full) mode = "half";
+  const target = m[mode];
+  const from = sheet.getBoundingClientRect().height;
+  sheetMode = mode;
+  sheet.classList.toggle("collapsed", mode === "peek");
+  sheet.classList.toggle("full", mode === "full");
+  $("#sheetHandle").setAttribute("aria-expanded", String(mode !== "peek"));
+  $("#sheetBody").inert = mode === "peek"; // thu gọn: không cho tab vào các dòng bị che
+
+  clearTimeout(sheet._settle);
+  sheet.classList.add("moving");
+  main.classList.add("sheet-moving");
+  sheet.style.transition = "none";
+  sheet.style.height = `${from}px`;
+  void sheet.offsetHeight; // ghi nhận điểm xuất phát trước khi bật transition
+  const ms = animate && !reducedMotion() ? 420 : 0;
+  sheet.style.transition = ms ? `height ${ms}ms cubic-bezier(.25, 1.2, .5, 1)` : "none";
+  sheet.style.height = `${target}px`;
+  sheet._settle = setTimeout(() => {
+    sheet.style.transition = "";
+    // Nấc half để chiều cao tự co giãn theo nội dung (thêm/bớt người) — khớp đúng giá trị vừa trượt tới.
+    if (mode === "half") sheet.style.height = "";
+    sheet.classList.remove("moving");
+    main.classList.remove("sheet-moving");
+  }, ms + 30);
+}
+
+// Giữ tên cũ cho các chỗ gọi trước đây
+const setSheetCollapsed = (collapsed) => setSheetMode(collapsed ? "peek" : "half");
+
 function bindSheetGestures() {
-  const h = $("#sheetHandle");
-  let y0 = null, swiped = false;
-  h.addEventListener("pointerdown", (e) => { y0 = e.clientY; swiped = false; h.setPointerCapture?.(e.pointerId); });
-  h.addEventListener("pointermove", (e) => {
-    if (y0 === null || swiped) return;
-    const dy = e.clientY - y0;
-    if (Math.abs(dy) > 24) { swiped = true; buzz(); setSheetCollapsed(dy > 0); }
+  const sheet = $("#sheet"), body = $("#sheetBody"), handle = $("#sheetHandle"), main = $("#main");
+  let g = null; // cử chỉ đang diễn ra
+  let suppressClick = false;
+
+  // t = thời điểm của chính sự kiện chạm (e.timeStamp) — chính xác hơn giờ lúc code chạy,
+  // vì trên điện thoại các sự kiện hay đến trễ / dồn cục, làm tính sai tốc độ hất.
+  const begin = (x, y, target, t) => {
+    if (isDesktop() || placing) return;
+    g = { x0: x, y0: y, h0: sheet.getBoundingClientRect().height, inBody: !!target.closest("#sheetBody"),
+          dragging: false, lastY: y, lastT: t, v: 0, m: null };
+  };
+  // Trả về true nếu cử chỉ này kéo bảng (khi đó chặn cuộn trang).
+  const move = (x, y, t) => {
+    if (!g) return false;
+    const dy = y - g.y0;
+    if (!g.dragging) {
+      if (Math.abs(dy) < 8) return false;
+      if (Math.abs(x - g.x0) > Math.abs(dy)) { g = null; return false; } // vuốt ngang: bỏ qua
+      if (g.inBody) {
+        if (dy > 0 && body.scrollTop > 0) { g = null; return false; }    // đang cuộn dở → cuộn lên
+        if (dy < 0 && sheetMode === "full") { g = null; return false; }  // đã full → cuộn danh sách
+        if (dy < 0 && sheetMode === "half" && !sheetMetrics().full) { g = null; return false; } // không còn gì để mở rộng
+      }
+      g.dragging = true;
+      g.m = sheetMetrics();
+      g.y0 = y; // bắt đầu tính từ đây để bảng không giật 8 px
+      g.h0 = sheet.getBoundingClientRect().height;
+      clearTimeout(sheet._settle);
+      sheet.classList.add("dragging", "moving");
+      main.classList.add("sheet-moving");
+      sheet.style.transition = "none";
+    }
+    g.v = 0.8 * ((y - g.lastY) / Math.max(1, t - g.lastT)) + 0.2 * g.v; // px/ms, làm mượt
+    g.lastY = y; g.lastT = t;
+    const min = g.m.peek, max = g.m.full || g.m.half;
+    let h = g.h0 - (y - g.y0);
+    if (h < min) h = min - (min - h) / 3;   // lực cản dây thun
+    if (h > max) h = max + (h - max) / 3;
+    sheet.style.height = `${h}px`;
+    return true;
+  };
+  const end = () => {
+    if (!g) return;
+    const { dragging, m, v, h0: g0h } = g;
+    g = null;
+    if (!dragging) return;
+    suppressClick = true;
+    setTimeout(() => { suppressClick = false; }, 50);
+    sheet.classList.remove("dragging");
+    const h = sheet.getBoundingClientRect().height;
+    const snaps = [["peek", m.peek], ["half", m.half]];
+    if (m.full) snaps.push(["full", m.full]);
+    const nearest = (list, to) => list.reduce((best, s) => (Math.abs(s[1] - to) < Math.abs(best[1] - to) ? s : best));
+    let mode;
+    if (Math.abs(v) > 0.35) {
+      // Hất (≥ 350 px/s): sang nấc kế tiếp theo hướng tay, kể cả khi mới kéo được một đoạn ngắn
+      const ahead = snaps.filter(([, sh]) => (v > 0 ? sh < g0h - 4 : sh > g0h + 4));
+      [mode] = ahead.length ? nearest(ahead, g0h) : nearest(snaps, h);
+    } else {
+      [mode] = nearest(snaps, h - v * 220); // kéo chậm: nấc gần chỗ thả nhất (có tính quán tính)
+    }
+    if (mode !== sheetMode) buzz();
+    setSheetMode(mode);
+  };
+
+  // Cảm ứng (điện thoại): touch events để còn nhường cuộn danh sách khi cần
+  const ts = (e) => e.timeStamp || performance.now();
+  sheet.addEventListener("touchstart", (e) => { if (e.touches.length === 1) begin(e.touches[0].clientX, e.touches[0].clientY, e.target, ts(e)); else g = null; }, { passive: true });
+  sheet.addEventListener("touchmove", (e) => { if (move(e.touches[0].clientX, e.touches[0].clientY, ts(e))) e.preventDefault(); }, { passive: false });
+  sheet.addEventListener("touchend", end);
+  sheet.addEventListener("touchcancel", end);
+
+  // Chuột (cửa sổ hẹp trên máy tính): kéo ở phần tiêu đề
+  handle.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "mouse") return;
+    begin(e.clientX, e.clientY, e.target, ts(e));
+    handle.setPointerCapture(e.pointerId);
   });
-  const end = () => { y0 = null; };
-  h.addEventListener("pointerup", end);
-  h.addEventListener("pointercancel", end);
-  h.addEventListener("click", () => {
-    if (swiped) { swiped = false; return; } // đã xử lý bằng cử chỉ vuốt
+  handle.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") move(e.clientX, e.clientY, ts(e)); });
+  handle.addEventListener("pointerup", (e) => { if (e.pointerType === "mouse") end(); });
+
+  // Chạm vào tiêu đề: thu gọn ⇄ mở
+  handle.addEventListener("click", () => {
+    if (suppressClick) return;
     buzz();
-    setSheetCollapsed(!$("#sheet").classList.contains("collapsed"));
+    setSheetMode(sheetMode === "peek" ? "half" : "peek");
   });
+
+  // Đổi kích thước màn hình / xoay máy: đặt lại đúng nấc hiện tại
+  addEventListener("resize", () => setSheetMode(sheetMode, false));
 }
 
 function bindMainUi() {

@@ -208,7 +208,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 @media (min-width: 720px) {
   .sheet { left: 16px; right: auto; bottom: 16px; width: 380px; border-radius: 26px; max-height: calc(100vh - 110px); }
 }
-.sheet.collapsed .sheet-body { display: none; }
+@media (min-width: 720px) { .sheet.collapsed .sheet-body { display: none; } }
 .sheet-head { position: relative; flex: none; }
 .sheet-handle {
   display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -782,4 +782,25 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .modal.dragging { user-select: none; -webkit-user-select: none; }
 @media (max-width: 719px) {
   .modal-body::before { width: 52px; margin-left: -26px; } /* tay cầm to hơn chút: gợi ý "kéo được" */
+}
+
+/* Bảng danh sách kéo được */
+@media (max-width: 719px) {
+  .sheet { overflow: hidden; will-change: height; }
+  .sheet.full, .sheet.moving { max-height: none; }
+  .sheet.full { border-radius: 22px 22px 0 0; }
+  .sheet-head { touch-action: none; }
+  .grip { transition: width .2s var(--spring), background-color .2s; }
+  .sheet.dragging .grip { width: 60px; background: var(--text-muted); }
+  .sheet.collapsed .sheet-body { opacity: 0; transition: opacity .2s; }
+  .sheet-body { transition: opacity .25s; }
+}
+/* Nút nổi đi cùng mép bảng từng khung hình khi kéo/trượt (không trễ theo transition) */
+#main.sheet-moving .map-fabs { transition: none; }
+.map-fabs { transition: bottom .3s ease, opacity .2s, scale .2s; }
+#main.fabs-hidden .map-fabs { opacity: 0; scale: .6; pointer-events: none; }
+/* Dòng ghi công OpenStreetMap: nằm ngay trên mép bảng, không đè lên danh sách */
+@media (max-width: 719px) {
+  #map .leaflet-bottom { bottom: var(--sheet-h, 0px); }
+  #main.sheet-moving #map .leaflet-bottom { transition: none; }
 }

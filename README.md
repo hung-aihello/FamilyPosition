@@ -126,6 +126,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.9.2 | 23/11/2026 | Bảng danh sách trên bản đồ kéo mượt như app: đi theo ngón tay, 3 nấc (thu gọn / nửa / toàn màn hình), hất nhanh để chuyển nấc, lực cản dây thun, nhường cuộn danh sách; nút nổi đi theo và tự ẩn khi bảng full; dòng ghi công OSM không còn đè lên danh sách |
 | 1.9.1 | 23/11/2026 | Vuốt xuống để đóng hộp thoại (trên điện thoại): hộp đi theo ngón tay, kéo đủ xa hoặc hất nhanh thì đóng, không thì bật về; không ảnh hưởng cuộn nội dung và khung căn ảnh |
 | 1.9.0 | 23/11/2026 | Giao diện vui hơn: màn hình chờ, emoji bay ở màn chào, lời chào theo giờ, danh sách bật lên lần lượt, ghim rơi xuống + sóng khi đang mở app, vòng cầu vồng ở thẻ chi tiết, hộp thoại trượt lên kiểu bảng, thông báo trực tiếp "Bố đã về đến Nhà" + pháo hoa emoji, pháo hoa khi lưu địa điểm/ảnh/vào nhóm. Sửa: màn hình trắng lúc tải, ghim bị nút nổi che, viền focus thô, dòng thông tin bị cắt |
 | 1.8.1 | 23/11/2026 | Sửa ảnh đại diện trên ghim bản đồ bị phóng to, chỉ thấy một góc (CSS của Leaflet ghi đè kích thước ảnh) |
