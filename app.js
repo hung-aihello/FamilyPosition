@@ -1,7 +1,7 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.7.1";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -656,15 +656,7 @@ const avatarHtml = (m, cls = "") =>
 function renderMarkers() {
   const located = locatedMembers().sort((a, b) => a.id.localeCompare(b.id));
 
-  // Nhiều người cùng một chỗ (cả nhà ở nhà) → xếp ghim cạnh nhau thay vì chồng lên.
-  const groups = [];
-  for (const m of located) {
-    const pt = map.latLngToLayerPoint([m.lat, m.lng]);
-    const g = groups.find((x) => x.pt.distanceTo(pt) < 44);
-    if (g) g.items.push(m); else groups.push({ pt, items: [m] });
-  }
-  const dx = new Map();
-  for (const g of groups) g.items.forEach((m, i) => dx.set(m.id, (i - (g.items.length - 1) / 2) * 50));
+  const dx = layoutPins(located);
 
   const seen = new Set();
   for (const m of located) {
@@ -708,6 +700,71 @@ function renderMarkers() {
   } else if (myAccuracyCircle) {
     myAccuracyCircle.remove();
     myAccuracyCircle = null;
+  }
+  layoutPlaceLabels();
+}
+
+/* ---- Chống chồng chữ/ghim trên bản đồ ---- */
+const PIN_W = 56, PIN_H = 66, PIN_LABEL_H = 26, PIN_GAP = 6;
+const labelWidth = (text) => Math.min(110, Math.round(String(text).length * 7.6) + 20);
+const boxesHit = (a, b) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+let pinBoxes = []; // khung chiếm chỗ của từng ghim (toạ độ màn hình), dùng để đặt nhãn địa điểm
+
+// Ghim nào đụng nhau (tính cả bong bóng lẫn nhãn tên) thì gom nhóm rồi dàn hàng ngang,
+// căn giữa quanh vị trí trung bình. Trả về độ lệch ngang (px) của từng ghim.
+function layoutPins(located) {
+  const items = located.map((m) => ({
+    id: m.id,
+    p: map.latLngToContainerPoint([m.lat, m.lng]),
+    w: Math.max(PIN_W, labelWidth(m.id === state.memberId ? "Tôi" : m.name)),
+  })).sort((a, b) => a.p.x - b.p.x || a.id.localeCompare(b.id));
+  const near = (a, b) => Math.abs(a.p.x - b.p.x) < (a.w + b.w) / 2 + PIN_GAP && Math.abs(a.p.y - b.p.y) < PIN_H + PIN_LABEL_H;
+
+  let groups = [];
+  for (const it of items) {
+    const hit = groups.filter((g) => g.some((o) => near(o, it)));
+    groups = groups.filter((g) => !hit.includes(g));
+    groups.push([...hit.flat(), it]);
+  }
+
+  const dx = new Map();
+  pinBoxes = [];
+  for (const g of groups) {
+    g.sort((a, b) => a.p.x - b.p.x || a.id.localeCompare(b.id));
+    const total = g.reduce((s, it) => s + it.w, 0) + PIN_GAP * (g.length - 1);
+    let x = g.reduce((s, it) => s + it.p.x, 0) / g.length - total / 2;
+    for (const it of g) {
+      const cx = g.length > 1 ? x + it.w / 2 : it.p.x;
+      const off = Math.round((cx - it.p.x) / 2) * 2; // làm tròn để ghim không bị vẽ lại vì lệch 1 px
+      dx.set(it.id, off);
+      pinBoxes.push({ x1: it.p.x + off - it.w / 2, x2: it.p.x + off + it.w / 2, y1: it.p.y - PIN_H, y2: it.p.y + PIN_LABEL_H });
+      x += it.w + PIN_GAP;
+    }
+  }
+  return dx;
+}
+
+// Nhãn địa điểm: thử đặt ở mép trên → dưới → phải → trái vòng tròn, chỗ nào không bị ghim che.
+// Chỗ nào cũng bị che (thường là khi thu nhỏ bản đồ) thì ẩn nhãn — vòng tròn vẫn còn,
+// và danh sách vẫn ghi "🏠 Ở Nhà".
+function layoutPlaceLabels() {
+  if (!map) return;
+  const taken = [...pinBoxes];
+  for (const [id, layer] of placeLayers) {
+    const pl = places[id];
+    const el = layer.marker.getElement()?.firstElementChild;
+    if (!pl || !el) continue;
+    const c = map.latLngToContainerPoint([pl.lat, pl.lng]);
+    const r = c.y - map.latLngToContainerPoint([pl.lat + pl.radius / 111320, pl.lng]).y;
+    const w = labelWidth(pl.name) + 30, h = 30;
+    const spots = [[0, -r - h / 2 - 2], [0, r + h / 2 + 2], [r + w / 2 + 2, 0], [-r - w / 2 - 2, 0]];
+    const box = ([ox, oy]) => ({ x1: c.x + ox - w / 2, x2: c.x + ox + w / 2, y1: c.y + oy - h / 2, y2: c.y + oy + h / 2 });
+    const pick = spots.find((s) => !taken.some((b) => boxesHit(box(s), b)));
+    el.style.visibility = pick ? "" : "hidden";
+    if (pick) {
+      el.style.transform = `translate(calc(-50% + ${Math.round(pick[0])}px), calc(-50% + ${Math.round(pick[1])}px))`;
+      taken.push(box(pick)); // nhãn địa điểm cũng không đè lên nhau
+    }
   }
 }
 
@@ -1033,8 +1090,8 @@ function renderPlaces() {
     const circle = L.circle([pl.lat, pl.lng], {
       radius: pl.radius, className: "place-circle", weight: 1.5, dashArray: "4 6", fillOpacity: 0.07, interactive: false,
     }).addTo(map);
-    // Nhãn nằm ở mép trên vòng tròn, để không bị ghim của người đang ở đó che mất.
-    const marker = L.marker([pl.lat + pl.radius / 111320, pl.lng], {
+    // Đặt ở tâm; layoutPlaceLabels() dời nhãn ra mép vòng tròn, chỗ không bị ghim che.
+    const marker = L.marker([pl.lat, pl.lng], {
       icon: L.divIcon({
         className: "", iconSize: [0, 0], iconAnchor: [0, 0],
         html: `<div class="place-pin"><span>${escapeHtml(pl.emoji || "📍")}</span>${escapeHtml(pl.name)}</div>`,
@@ -1047,6 +1104,7 @@ function renderPlaces() {
   for (const [id, layer] of placeLayers) {
     if (!seen.has(id)) { layer.circle.remove(); layer.marker.remove(); placeLayers.delete(id); }
   }
+  layoutPlaceLabels();
 }
 
 function openPlaces() {

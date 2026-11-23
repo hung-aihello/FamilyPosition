@@ -342,6 +342,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
   padding: 3px 10px 3px 4px; border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--text);
   font-size: 13px; font-weight: 700; box-shadow: 0 1px 5px rgba(0,0,0,.18);
+  max-width: 140px; overflow: hidden; text-overflow: ellipsis;
 }
 .place-pin span { width: 24px; height: 24px; display: grid; place-items: center; font-size: 15px; border-radius: 50%; background: var(--primary-soft); }
 
@@ -423,6 +424,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
   white-space: nowrap; font-weight: 700; font-size: 13px;
   padding: 2px 9px; border-radius: 999px;
   background: rgba(255,255,255,.95); color: #1c1917; box-shadow: 0 1px 4px rgba(0,0,0,.2);
+  max-width: 110px; overflow: hidden; text-overflow: ellipsis;
 }
 .pin.stale .pin-bubble { filter: grayscale(.85); opacity: .75; }
 .pin.me .pin-bubble { animation: halo 2.4s ease-out infinite; }
