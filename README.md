@@ -126,6 +126,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.9.0 | 23/11/2026 | Giao diện vui hơn: màn hình chờ, emoji bay ở màn chào, lời chào theo giờ, danh sách bật lên lần lượt, ghim rơi xuống + sóng khi đang mở app, vòng cầu vồng ở thẻ chi tiết, hộp thoại trượt lên kiểu bảng, thông báo trực tiếp "Bố đã về đến Nhà" + pháo hoa emoji, pháo hoa khi lưu địa điểm/ảnh/vào nhóm. Sửa: màn hình trắng lúc tải, ghim bị nút nổi che, viền focus thô, dòng thông tin bị cắt |
 | 1.8.1 | 23/11/2026 | Sửa ảnh đại diện trên ghim bản đồ bị phóng to, chỉ thấy một góc (CSS của Leaflet ghi đè kích thước ảnh) |
 | 1.8.0 | 23/11/2026 | Ảnh đại diện: chọn ảnh, căn chỉnh (kéo/chụm/thanh trượt), nén WebP 256 px, lưu riêng + nhớ trong máy; ảnh hiện ở danh sách, ghim, thẻ chi tiết, dòng thời gian, bước nhận lại danh tính |
 | 1.7.1 | 23/11/2026 | Sửa chữ/ghim đè nhau trên bản đồ: dàn ghim theo khung thật (bong bóng + tên), nhãn địa điểm tự né sang chỗ trống |

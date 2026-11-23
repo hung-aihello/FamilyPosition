@@ -21,8 +21,23 @@
 </head>
 <body>
 
+  <!-- ============ MÀN HÌNH CHỜ (trong lúc tải Firebase) ============ -->
+  <section id="splash" class="screen splash" aria-label="Đang mở Nhà Mình">
+    <div class="splash-inner">
+      <div class="splash-badge" aria-hidden="true">🏡</div>
+      <p class="splash-name">Nhà Mình</p>
+      <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+    </div>
+  </section>
+
   <!-- ============ ONBOARDING ============ -->
   <section id="onboarding" class="screen" hidden>
+    <div class="floaties" aria-hidden="true">
+      <span style="--x:8%;--d:0s;--t:17s">👵</span><span style="--x:22%;--d:-6s;--t:21s">🐶</span>
+      <span style="--x:38%;--d:-11s;--t:19s">💛</span><span style="--x:55%;--d:-3s;--t:23s">👦</span>
+      <span style="--x:70%;--d:-14s;--t:18s">📍</span><span style="--x:84%;--d:-8s;--t:22s">👩</span>
+      <span style="--x:94%;--d:-17s;--t:20s">🏠</span><span style="--x:46%;--d:-19s;--t:25s">✨</span>
+    </div>
     <div class="ob-wrap">
 
       <!-- Bước 1: tên + hình đại diện -->
@@ -137,6 +152,7 @@
       <div class="sheet-head">
         <button id="sheetHandle" class="sheet-handle" type="button" aria-expanded="true" aria-controls="sheetBody">
           <span class="grip" aria-hidden="true"></span>
+          <span id="greeting" class="greeting"></span>
           <span class="sheet-title">Cả nhà <span id="memberCount" class="count"></span></span>
         </button>
         <button id="openPlaces" class="chip-btn" type="button">📍 Địa điểm</button>
@@ -151,8 +167,10 @@
             <li class="member skeleton" aria-hidden="true"><span class="member-main"><span class="avatar"></span><span class="member-info sk-info"><span class="sk-line"></span><span class="sk-line"></span></span></span></li>
           </ul>
           <div id="emptyState" class="empty" hidden>
-            <p>Chưa có ai khác trong nhóm.</p>
-            <button id="emptyInvite" class="btn btn-primary" type="button">Mời người thân</button>
+            <div class="empty-art" aria-hidden="true"><span class="wave">👋</span></div>
+            <p class="empty-title">Nhà mình còn hơi vắng!</p>
+            <p class="empty-sub">Gửi lời mời để cả nhà cùng thấy nhau trên bản đồ.</p>
+            <button id="emptyInvite" class="btn btn-primary" type="button">💌 Mời người thân</button>
           </div>
 
           <div id="placeHint" class="hint-card" hidden>
@@ -178,7 +196,7 @@
           <div class="detail-head">
             <span id="detailAvatar" class="avatar avatar-lg"></span>
             <div class="detail-title">
-              <h3 id="detailName"></h3>
+              <h3 id="detailName" tabindex="-1"></h3>
               <p id="detailStatus" class="detail-status"></p>
             </div>
           </div>
@@ -354,6 +372,9 @@
   </section>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <!-- Thông báo "Bố vừa về nhà" + hiệu ứng pháo hoa emoji -->
+  <div id="liveToast" class="live-toast" role="status" aria-live="polite" hidden></div>
+  <div id="fx" class="fx" aria-hidden="true"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>

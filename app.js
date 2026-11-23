@@ -1,7 +1,7 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.8.1";
+const APP_VERSION = "1.9.0";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -449,7 +449,14 @@ const isDesktop = () => matchMedia("(min-width: 720px)").matches;
 const HIDDEN_POS = { lat: null, lng: null, acc: null, speed: null, place: null, placeSince: null };
 
 async function enterMain(opts = {}) {
+  const welcome = state.member === false; // vừa tạo / vào nhóm lần đầu
   showScreen("main");
+  if (welcome) {
+    setTimeout(() => {
+      burst(innerWidth / 2, innerHeight * 0.35, ["🎉", "🏡", "💛", "✨", "🥳"], 34);
+      toast("Chào mừng về Nhà Mình! 🏡", 3500);
+    }, 900);
+  }
   initMap();
   observeSheet();
   bindMainUi();
@@ -510,6 +517,7 @@ async function enterMain(opts = {}) {
   fb.onValue(fb.query(famRef("events"), fb.orderByChild("at"), fb.startAt(Date.now() - 2 * 864e5)), (s) => {
     events = [];
     s.forEach((c) => { const v = c.val(); if (v) events.push({ id: c.key, ...v }); });
+    announceEvents();
     renderFeed();
   });
   // Dọn sự kiện cũ (ai mở app cũng dọn giúp) — giữ database gọn.
@@ -575,8 +583,8 @@ function observeSheet() {
 function mapPadding() {
   const sheet = $("#sheet").getBoundingClientRect();
   return isDesktop()
-    ? { paddingTopLeft: [sheet.width + 40, 90], paddingBottomRight: [40, 40] }
-    : { paddingTopLeft: [40, 100], paddingBottomRight: [40, sheet.height + 40] };
+    ? { paddingTopLeft: [sheet.width + 48, 150], paddingBottomRight: [104, 48] }
+    : { paddingTopLeft: [48, 150], paddingBottomRight: [104, sheet.height + 36] }; // 104 = cột nút nổi + nửa bong bóng ghim
 }
 
 function focusOn(points, animate = true) {
@@ -618,6 +626,7 @@ function memberStatus(m, id) {
 
 function render() {
   if (!map) return;
+  $("#greeting").textContent = greetingText();
   renderMarkers();
   renderList();
   renderFeed();
@@ -631,6 +640,92 @@ function render() {
       autoFitCount = pts.length;
     }
   }
+}
+
+/* ---- Hiệu ứng ---- */
+let dropIndex = 0;
+
+// Gắn class để chạy animation CSS một lần, rồi gỡ ra (để lần sau còn chạy lại được).
+function playOnce(el, cls, delay = 0, ms = 1200) {
+  if (!el || reducedMotion()) return;
+  el.style.animationDelay = delay ? `${delay}ms` : "";
+  el.classList.remove(cls);
+  void el.offsetWidth; // ép trình duyệt vẽ lại để animation chạy từ đầu
+  el.classList.add(cls);
+  setTimeout(() => { el.classList.remove(cls); el.style.animationDelay = ""; }, ms + delay);
+}
+
+// Pháo hoa emoji bung ra từ một điểm rồi rơi xuống.
+function burst(x, y, emojis = ["🎉", "✨", "💛"], n = 22, down = false) {
+  if (reducedMotion()) return;
+  const fx = $("#fx");
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement("span");
+    el.textContent = emojis[i % emojis.length];
+    const size = 16 + Math.random() * 18;
+    el.style.fontSize = `${size}px`;
+    fx.appendChild(el);
+    const angle = (down ? 1 : -1) * Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.3; // chủ yếu bắn lên (hoặc xuống)
+    const dist = 90 + Math.random() * 150;
+    const dx = Math.cos(angle) * dist, dy = Math.sin(angle) * dist;
+    const spin = (Math.random() - 0.5) * 720;
+    const x0 = x - size / 2, y0 = y - size / 2;
+    el.animate([
+      { transform: `translate(${x0}px, ${y0}px) scale(.3) rotate(0deg)`, opacity: 1 },
+      { transform: `translate(${x0 + dx}px, ${y0 + dy}px) scale(1) rotate(${spin / 2}deg)`, opacity: 1, offset: 0.45 },
+      { transform: `translate(${x0 + dx * 1.2}px, ${y0 + dy + 260}px) scale(.8) rotate(${spin}deg)`, opacity: 0 },
+    ], { duration: 1400 + Math.random() * 700, easing: "cubic-bezier(.2,.7,.4,1)" }).finished.then(() => el.remove(), () => el.remove());
+  }
+}
+
+function greetingText() {
+  const h = new Date().getHours();
+  const [icon, part] = h < 5 ? ["🌙", "Khuya rồi"] : h < 11 ? ["☀️", "Chào buổi sáng"] : h < 14 ? ["🌤️", "Chào buổi trưa"]
+    : h < 18 ? ["⛅", "Chào buổi chiều"] : h < 22 ? ["🌆", "Chào buổi tối"] : ["🌙", "Khuya rồi"];
+  return `${icon} ${part}, ${state.name || "bạn"}`;
+}
+
+// Có người vừa đến / rời một địa điểm trong lúc mình đang mở app → thông báo + pháo hoa + ghim nảy lên.
+const seenEvents = new Set();
+const freshEvents = new Set();
+let eventsPrimed = false;
+function announceEvents() {
+  const fresh = events.filter((e) => !seenEvents.has(e.id));
+  for (const e of events) seenEvents.add(e.id);
+  if (!eventsPrimed) { eventsPrimed = true; return; } // lần tải đầu: chỉ là lịch sử
+  for (const e of fresh) {
+    freshEvents.add(e.id);
+    setTimeout(() => freshEvents.delete(e.id), 3000);
+    if (e.m !== state.memberId && now() - (e.at || 0) < 5 * 60e3) showLive(e);
+  }
+}
+
+let liveTimer;
+function showLive(e) {
+  const m = members[e.m], pl = places[e.place];
+  if (!m?.name || !pl) return;
+  const home = pl.emoji === "🏠";
+  const verb = e.type === "leave" ? "vừa rời" : home ? "đã về đến" : "vừa đến";
+  const box = $("#liveToast");
+  box.innerHTML = `${avatarHtml(m, e.m)}
+    <span class="lt-text"><strong>${escapeHtml(m.name)}</strong> ${verb} <strong>${escapeHtml(`${pl.emoji || "📍"} ${pl.name}`)}</strong>
+      <small>${escapeHtml(clockTime(e.at || Date.now()))}</small></span>
+    <span class="lt-emoji" aria-hidden="true">${e.type === "leave" ? "👋" : home ? "🏡" : "🎉"}</span>`;
+  box.classList.remove("out");
+  box.hidden = false;
+  buzz([30, 60, 30]);
+  if (e.type === "arrive") {
+    requestAnimationFrame(() => {
+      const r = box.getBoundingClientRect();
+      burst(r.left + r.width / 2, r.bottom, [pl.emoji || "📍", "🎉", "💛", "✨"], 28, true);
+    });
+  }
+  playOnce(markers.get(e.m)?.marker.getElement()?.firstElementChild, "hop", 0, 700);
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(() => {
+    box.classList.add("out");
+    setTimeout(() => { box.hidden = true; }, 380);
+  }, 5000);
 }
 
 /* ---- Trạng thái hiển thị của một người ---- */
@@ -670,7 +765,8 @@ function renderMarkers() {
     seen.add(m.id);
     const isMe = m.id === state.memberId;
     const stale = !isMe && now() - (m.updatedAt || 0) > IDLE_WINDOW;
-    const cls = `pin${isMe ? " me" : ""}${stale ? " stale" : ""}${selectedId === m.id ? " selected" : ""}`;
+    const live = !isMe && memberStatus(m, m.id) === "on";
+    const cls = `pin${isMe ? " me" : ""}${live ? " live" : ""}${stale ? " stale" : ""}${selectedId === m.id ? " selected" : ""}`;
     const html = `<div class="${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")};--dx:${dx.get(m.id) || 0}px">
       <div class="pin-bubble">${avatarInner(m, m.id)}</div>
       <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div></div>`;
@@ -681,6 +777,7 @@ function renderMarkers() {
         keyboard: true, title: m.name, zIndexOffset: isMe ? 1000 : 0,
       }).addTo(map);
       marker.on("click", (e) => { L.DomEvent.stopPropagation(e); openDetail(m.id); });
+      playOnce(marker.getElement()?.firstElementChild, "drop", (dropIndex++ % 8) * 90);
       entry = { marker, html, target: [m.lat, m.lng] };
       markers.set(m.id, entry);
     } else {
@@ -827,10 +924,9 @@ function renderList() {
     const pl = hasPos ? memberPlace(m) : null;
     const moving = hasPos && !pl ? movingText(m, id) : null;
 
-    const meta = []; // các đoạn HTML đã escape
+    const meta = []; // dòng phụ: các đoạn HTML đã escape
     const text = (s) => meta.push(escapeHtml(s));
-    if (pl) meta.push(`<span class="place-tag">${escapeHtml(placeLabel(pl))}</span>`);
-    else if (moving) meta.push(`<span class="place-tag">${escapeHtml(moving)}</span>`);
+    const tag = pl ? placeLabel(pl) : moving; // dòng chính: đang ở đâu / đang đi
     if (isMe) {
       if (!state.sharing) text("Đã tắt chia sẻ vị trí");
       else if (!gpsOn()) text(hasPos ? `Máy này chỉ xem · vị trí từ máy khác, ${relTime(now() - (m.updatedAt || 0))}` : "Máy này chỉ xem");
@@ -845,13 +941,13 @@ function renderList() {
       text(status === "on" ? "Đang mở app" : relTime(now() - (m.updatedAt || 0)));
       if (here && !(pl && herePlace && pl.id === herePlace.id)) text(`cách ${formatDistance(distanceMeters(here, m))}`);
     }
-    if (!isMe && typeof m.battery === "number") {
-      const low = m.battery <= 20 && !m.charging;
-      meta.push(`<span class="batt${low ? " low" : ""}">${m.charging ? "⚡" : "🔋"} ${m.battery}%</span>`);
+    if (!isMe && typeof m.battery === "number" && m.battery <= 20 && !m.charging) {
+      meta.unshift(`<span class="batt low">🪫 ${m.battery}%</span>`); // sắp hết pin: đưa lên đầu cho dễ thấy
     }
 
     const li = document.createElement("li");
-    li.className = "member";
+    li.className = listAnimated ? "member" : "member enter";
+    li.style.setProperty("--i", String(list.children.length));
     li.innerHTML = `
       <button class="member-main" type="button" aria-label="${escapeHtml(isMe ? "Xem chi tiết của tôi" : `Xem chi tiết của ${m.name}`)}">
         <span class="avatar" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
@@ -859,7 +955,7 @@ function renderList() {
         </span>
         <span class="member-info">
           <span class="member-name">${escapeHtml(m.name)}${isMe ? ' <span class="me">(bạn)</span>' : ""}</span>
-          <span class="member-meta">${meta.join(" · ")}</span>
+          <span class="member-meta">${tag ? `<span class="member-tag">${escapeHtml(tag)}</span>` : ""}<span class="member-sub">${meta.join(" · ")}</span></span>
         </span>
       </button>`;
     li.querySelector(".member-main").addEventListener("click", () => openDetail(id));
@@ -876,12 +972,15 @@ function renderList() {
     }
     list.appendChild(li);
   }
+  listAnimated = true;
 }
 
+// (listAnimated được bật ở cuối renderList khi đã có dữ liệu)
 const directionsUrl = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
 
 /* ---- Dòng thời gian "Hôm nay" ---- */
 
+let listAnimated = false; // chỉ lần đầu có dữ liệu mới cho các dòng bật lên lần lượt
 function renderFeed() {
   const hasPlaces = Object.keys(places).length > 0;
   $("#feed").hidden = !membersLoaded || !hasPlaces;
@@ -904,7 +1003,7 @@ function renderFeed() {
     const m = members[e.m], pl = places[e.place];
     const who = e.m === state.memberId ? "Bạn" : m.name;
     const verb = e.type === "leave" ? "đã rời" : pl.emoji === "🏠" ? "đã về" : "đã đến";
-    return `<li class="feed-item">${avatarHtml(m, e.m, "avatar-sm")}
+    return `<li class="feed-item${freshEvents.has(e.id) ? " new" : ""}">${avatarHtml(m, e.m, "avatar-sm")}
       <span class="feed-text"><strong>${escapeHtml(who)}</strong> ${verb} <strong>${escapeHtml(`${pl.emoji || "📍"} ${pl.name}`)}</strong></span>
       <time class="feed-time" datetime="${new Date(e.at).toISOString()}">${escapeHtml(clockTime(e.at))}</time></li>`;
   }).join("");
@@ -929,7 +1028,8 @@ function openDetail(id) {
     requestAnimationFrame(() => focusOn([m]));
   }
   $("#memberDetail").scrollIntoView?.({ block: "start" });
-  $("#detailBack").focus({ preventScroll: true });
+  $("#detailName").focus({ preventScroll: true }); // cho trình đọc màn hình, không hiện viền
+  playOnce($("#memberDetail"), "enter", 0, 900);
 }
 
 function closeDetail() {
@@ -960,6 +1060,7 @@ function renderDetail() {
   const av = $("#detailAvatar");
   av.style.setProperty("--c", m.color || "#ccfbf1");
   av.innerHTML = avatarInner(m, id);
+  av.classList.toggle("live", status === "on" && !isMe);
   $("#detailName").textContent = isMe ? `${m.name} (bạn)` : m.name;
 
   const st = $("#detailStatus");
@@ -1272,6 +1373,8 @@ function savePlace() {
   fb.set(famRef(`places/${id}`), data).catch(onWriteError);
   buzz(15);
   toast(`Đã lưu ${placing.emoji} ${name} ✓`);
+  const ch = $("#crosshair").getBoundingClientRect();
+  burst(ch.left + ch.width / 2, ch.top, [placing.emoji, "✨", "💛", "🎉"]);
   state.placeHintDismissed = true;
   saveState();
   stopPlacing();
@@ -1763,6 +1866,7 @@ async function saveSettings() {
 
   const patch = profilePayload();
   if (!state.sharing) Object.assign(patch, { ...HIDDEN_POS });
+  const photoChanged = !!draftPhoto;
   applyDraftPhoto(patch);
   fb.update(meRef(), patch).catch(onWriteError);
 
@@ -1774,6 +1878,7 @@ async function saveSettings() {
   updateStatus();
   render();
   toast("Đã lưu ✓");
+  if (photoChanged) burst(innerWidth / 2, innerHeight * 0.45, ["📸", "✨", "💖", "🌟"]);
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
