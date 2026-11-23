@@ -96,6 +96,21 @@ Mở link mời trên máy thứ hai → sau khi nhập tên, app hỏi **“B�
 - Hạn mức Firebase miễn phí: 100 kết nối đồng thời, 1 GB lưu trữ, 10 GB tải xuống/tháng — dư sức cho vài gia đình.
 - Tile bản đồ dùng máy chủ OpenStreetMap theo [chính sách sử dụng](https://operations.osmfoundation.org/policies/tiles/) — phù hợp cho dùng cá nhân/gia đình.
 
+## Lịch sử phiên bản
+Phiên bản đang chạy xem ở **⚙️ Cài đặt** (dòng cuối). Bấm **Tải lại để cập nhật** để lấy bản mới nhất — hữu ích khi cài như app trên điện thoại (không có nút tải lại).
+
+Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và thêm một dòng vào bảng dưới.
+
+| Phiên bản | Ngày | Thay đổi |
+|---|---|---|
+| 1.6.0 | 23/11/2026 | Hiện số phiên bản trong Cài đặt, nút tải lại để cập nhật |
+| 1.5.0 | 23/11/2026 | Một người dùng nhiều máy: nhận lại danh tính, công tắc “Lấy vị trí từ máy này” |
+| 1.4.0 | 23/11/2026 | Sửa 6 lỗi từ code review, thêm nút Đổi mã nhóm |
+| 1.3.0 | 23/11/2026 | Danh sách cấm thành viên theo ID |
+| 1.2.0 | 23/11/2026 | Xoá thành viên từ phía quản trị = mời ra khỏi nhóm |
+| 1.1.0 | 23/11/2026 | App Check (reCAPTCHA Enterprise) chống bot |
+| 1.0.0 | 23/11/2026 | Bản đầu tiên |
+
 ## Cấu trúc
 
 | File | Nội dung |

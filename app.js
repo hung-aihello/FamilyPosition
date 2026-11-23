@@ -1,5 +1,8 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
+// Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
+const APP_VERSION = "1.6.0";
+const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"; // bỏ các ký tự dễ nhầm: i l o 0 1
@@ -962,6 +965,10 @@ async function boot() {
   } else {
     startOnboarding();
   }
+
+  $("#appVersion").textContent = `Phiên bản ${APP_VERSION} (${APP_RELEASED})`;
+  $("#reloadApp").addEventListener("click", () => location.reload());
+  console.info(`Nhà Mình ${APP_VERSION}`);
 
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
