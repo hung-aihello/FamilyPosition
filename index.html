@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cut">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="description" content="Xem vị trí của người thân trong gia đình theo thời gian thực.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Nhà Mình">
+  <title>Nhà Mình</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ============ ONBOARDING ============ -->
+  <section id="onboarding" class="screen" hidden>
+    <div class="ob-wrap">
+
+      <!-- Bước 1: tên + hình đại diện -->
+      <div class="ob-step" data-step="profile">
+        <div class="hero">
+          <div class="hero-badge" aria-hidden="true">🏡</div>
+          <h1>Nhà Mình</h1>
+          <p class="lead">Biết người thân đang ở đâu, chỉ với một chạm.</p>
+        </div>
+
+        <label class="field-label" for="nameInput">Bạn tên là gì?</label>
+        <input id="nameInput" class="input" type="text" maxlength="24" autocomplete="given-name"
+               placeholder="Ví dụ: Mẹ, Bố, Bé Na…" enterkeyhint="next">
+
+        <p class="field-label" id="avatarLabel">Chọn hình đại diện</p>
+        <div id="avatarGrid" class="avatar-grid" role="radiogroup" aria-labelledby="avatarLabel"></div>
+
+        <button id="profileNext" class="btn btn-primary btn-lg" type="button" disabled>Tiếp tục</button>
+      </div>
+
+      <!-- Bước 2: tạo / tham gia gia đình -->
+      <div class="ob-step" data-step="family" hidden>
+        <button class="back-link" type="button" data-goto="profile">‹ Quay lại</button>
+
+        <div id="inviteBox" class="invite-card" hidden>
+          <div class="invite-emoji" aria-hidden="true">💌</div>
+          <h2>Bạn được mời vào nhóm gia đình</h2>
+          <p class="muted">Mã nhóm: <strong id="inviteCode" class="mono"></strong></p>
+          <button id="joinInvited" class="btn btn-primary btn-lg" type="button">Vào nhóm</button>
+          <button id="ignoreInvite" class="btn btn-ghost" type="button">Không, tôi muốn tạo nhóm khác</button>
+        </div>
+
+        <div id="chooseBox">
+          <h2 class="step-title">Bắt đầu thôi!</h2>
+          <button id="createFamily" class="choice" type="button">
+            <span class="choice-icon" aria-hidden="true">✨</span>
+            <span><strong>Tạo nhóm gia đình mới</strong><small>Rồi gửi lời mời cho cả nhà</small></span>
+          </button>
+          <button id="showJoin" class="choice" type="button">
+            <span class="choice-icon" aria-hidden="true">🔑</span>
+            <span><strong>Tôi có mã mời</strong><small>Người nhà đã gửi mã cho bạn</small></span>
+          </button>
+
+          <form id="joinForm" class="join-form" hidden>
+            <label class="field-label" for="codeInput">Nhập mã mời</label>
+            <input id="codeInput" class="input mono code-input" type="text" inputmode="text"
+                   autocapitalize="none" autocomplete="off" spellcheck="false"
+                   placeholder="xxxxx-xxxxx" maxlength="32">
+            <p id="codeError" class="error" role="alert" hidden></p>
+            <button class="btn btn-primary btn-lg" type="submit">Vào nhóm</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Bước 3: xin quyền vị trí -->
+      <div class="ob-step" data-step="permission" hidden>
+        <div class="hero">
+          <div class="hero-badge pulse" aria-hidden="true">📍</div>
+          <h2>Chia sẻ vị trí của bạn</h2>
+          <p class="lead">Chỉ những người trong nhóm gia đình mới thấy được vị trí của bạn.</p>
+        </div>
+        <ul class="tips">
+          <li>Khi điện thoại hỏi, hãy chọn <strong>“Cho phép”</strong>.</li>
+          <li>Vị trí được cập nhật khi bạn mở ứng dụng.</li>
+          <li>Bạn có thể tắt chia sẻ bất cứ lúc nào.</li>
+        </ul>
+        <button id="grantLocation" class="btn btn-primary btn-lg" type="button">Cho phép &amp; bắt đầu</button>
+        <button id="skipLocation" class="btn btn-ghost" type="button">Để sau, chỉ xem bản đồ</button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ MÀN HÌNH CHÍNH ============ -->
+  <section id="main" class="screen" hidden>
+    <div id="map" role="application" aria-label="Bản đồ vị trí gia đình"></div>
+
+    <header class="topbar">
+      <button id="statusPill" class="pill" type="button" aria-live="polite">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">Đang kết nối…</span>
+      </button>
+      <div class="topbar-actions">
+        <button id="openInvite" class="icon-btn" type="button" aria-label="Mời người thân">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 8a3 3 0 1 0-3-3M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0M19 8v6m3-3h-6"/></svg>
+        </button>
+        <button id="openSettings" class="icon-btn" type="button" aria-label="Cài đặt">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="map-fabs">
+      <button id="fitAll" class="fab" type="button" aria-label="Xem cả nhà">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/></svg>
+      </button>
+      <button id="locateMe" class="fab" type="button" aria-label="Về vị trí của tôi">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3"/></svg>
+      </button>
+    </div>
+
+    <aside id="sheet" class="sheet" aria-label="Danh sách thành viên">
+      <button id="sheetHandle" class="sheet-handle" type="button" aria-expanded="true" aria-controls="memberList">
+        <span class="grip" aria-hidden="true"></span>
+        <span class="sheet-title">Cả nhà <span id="memberCount" class="count"></span></span>
+      </button>
+      <ul id="memberList" class="member-list"></ul>
+      <div id="emptyState" class="empty" hidden>
+        <p>Chưa có ai khác trong nhóm.</p>
+        <button id="emptyInvite" class="btn btn-primary" type="button">Mời người thân</button>
+      </div>
+    </aside>
+  </section>
+
+  <!-- ============ DIALOG: MỜI ============ -->
+  <dialog id="inviteDialog" class="modal" aria-labelledby="inviteTitle">
+    <div class="modal-body">
+      <h2 id="inviteTitle" tabindex="-1" autofocus>Mời người thân</h2>
+      <p class="muted">Gửi đường dẫn, hoặc cho người thân quét mã QR này bằng camera điện thoại.</p>
+      <div id="qr" class="qr" aria-label="Mã QR mời vào nhóm" role="img"></div>
+      <p class="code-display mono" id="familyCodeDisplay"></p>
+      <button id="shareLink" class="btn btn-primary btn-lg" type="button">Gửi lời mời</button>
+      <button id="copyLink" class="btn btn-secondary" type="button">Sao chép đường dẫn</button>
+      <button class="btn btn-ghost" type="button" data-close>Đóng</button>
+    </div>
+  </dialog>
+
+  <!-- ============ DIALOG: CÀI ĐẶT ============ -->
+  <dialog id="settingsDialog" class="modal" aria-labelledby="settingsTitle">
+    <div class="modal-body">
+      <h2 id="settingsTitle" tabindex="-1" autofocus>Cài đặt</h2>
+
+      <label class="field-label" for="settingsName">Tên hiển thị</label>
+      <input id="settingsName" class="input" type="text" maxlength="24">
+
+      <p class="field-label" id="settingsAvatarLabel">Hình đại diện</p>
+      <div id="settingsAvatarGrid" class="avatar-grid compact" role="radiogroup" aria-labelledby="settingsAvatarLabel"></div>
+
+      <div class="switch-row">
+        <span>
+          <strong>Chia sẻ vị trí của tôi</strong>
+          <small>Tắt đi thì người thân sẽ không thấy bạn ở đâu</small>
+        </span>
+        <input id="shareToggle" type="checkbox" class="switch" role="switch" aria-label="Chia sẻ vị trí của tôi">
+      </div>
+
+      <div class="switch-row" id="wakeRow">
+        <span>
+          <strong>Giữ màn hình sáng</strong>
+          <small>Giúp vị trí cập nhật liên tục khi đang di chuyển</small>
+        </span>
+        <input id="wakeToggle" type="checkbox" class="switch" role="switch" aria-label="Giữ màn hình sáng">
+      </div>
+
+      <button id="saveSettings" class="btn btn-primary btn-lg" type="button">Lưu</button>
+      <button id="leaveFamily" class="btn btn-danger" type="button">Rời khỏi nhóm gia đình</button>
+      <button class="btn btn-ghost" type="button" data-close>Đóng</button>
+    </div>
+  </dialog>
+
+  <!-- ============ DIALOG: XÁC NHẬN RỜI NHÓM ============ -->
+  <dialog id="confirmLeave" class="modal" aria-labelledby="leaveTitle">
+    <div class="modal-body">
+      <h2 id="leaveTitle" tabindex="-1" autofocus>Rời khỏi nhóm?</h2>
+      <p class="muted">Bạn sẽ không còn thấy vị trí người thân, và họ cũng không thấy bạn nữa. Có thể vào lại bằng mã mời.</p>
+      <button id="confirmLeaveYes" class="btn btn-danger btn-lg" type="button">Rời nhóm</button>
+      <button class="btn btn-ghost" type="button" data-close>Huỷ</button>
+    </div>
+  </dialog>
+
+  <!-- ============ CHƯA CẤU HÌNH ============ -->
+  <section id="setupNeeded" class="screen" hidden>
+    <div class="ob-wrap">
+      <div class="hero">
+        <div class="hero-badge" aria-hidden="true">🛠️</div>
+        <h1>Cần cấu hình Firebase</h1>
+        <p class="lead">Mở file <code>config.js</code> và dán cấu hình Firebase của bạn vào. Xem hướng dẫn trong <code>README.md</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

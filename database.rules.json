@@ -1,0 +1,30 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "families": {
+      "$familyId": {
+        ".read": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/)",
+        "members": {
+          "$memberId": {
+            ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $memberId.matches(/^[a-z0-9]{16}$/)",
+            ".validate": "newData.hasChild('name')",
+            "name":      { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
+            "emoji":     { ".validate": "newData.isString() && newData.val().length <= 8" },
+            "color":     { ".validate": "newData.isString() && newData.val().matches(/^#[0-9a-f]{6}$/)" },
+            "sharing":   { ".validate": "newData.isBoolean()" },
+            "online":    { ".validate": "newData.isBoolean()" },
+            "lat":       { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+            "lng":       { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
+            "acc":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "battery":   { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "charging":  { ".validate": "newData.isBoolean()" },
+            "updatedAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "joinedAt":  { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "$other":    { ".validate": false }
+          }
+        }
+      }
+    }
+  }
+}
