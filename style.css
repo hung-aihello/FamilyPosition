@@ -776,3 +776,10 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .avatar-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .avatar-grid.compact { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .avatar-opt { min-width: 0; padding: 0; }
+
+/* Vuốt xuống để đóng hộp thoại: nền mờ nhạt dần theo ngón tay */
+.modal::backdrop { opacity: calc(1 - var(--drag, 0) * .8); }
+.modal.dragging { user-select: none; -webkit-user-select: none; }
+@media (max-width: 719px) {
+  .modal-body::before { width: 52px; margin-left: -26px; } /* tay cầm to hơn chút: gợi ý "kéo được" */
+}

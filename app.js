@@ -1,7 +1,7 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "1.9.1";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -154,7 +154,66 @@ function setupDialogs() {
     d.addEventListener("click", (e) => {
       if (e.target === d || e.target.closest("[data-close]")) d.close();
     });
+    bindSwipeToClose(d);
   }
+}
+
+// Trên điện thoại hộp thoại là "bảng" trượt từ dưới lên → vuốt xuống để đóng.
+// Hộp đi theo ngón tay; kéo quá 1/4 chiều cao hoặc hất nhanh thì đóng, không thì bật về.
+// Chỉ bắt đầu khi nội dung đang ở trên cùng (đang cuộn dở thì vuốt xuống = cuộn lên như thường).
+// Dùng `transform` cho việc kéo — tách với animation trượt lên (dùng `translate`) để không đè nhau.
+const isSheetModal = () => matchMedia("(max-width: 719px)").matches;
+function bindSwipeToClose(d) {
+  let y0 = 0, x0 = 0, t0 = 0, dy = 0, armed = false, dragging = false;
+  const reset = () => { d.style.transform = ""; d.style.transition = ""; d.style.removeProperty("--drag"); d.classList.remove("dragging"); };
+
+  d.addEventListener("touchstart", (e) => {
+    armed = dragging = false;
+    if (!isSheetModal() || e.touches.length !== 1) return;
+    // Vùng tự xử lý kéo: khung căn ảnh, thanh trượt, ô nhập chữ
+    if (e.target.closest(".crop-box, input[type=range], input[type=text], textarea")) return;
+    if (d.scrollTop > 0) return;
+    const t = e.touches[0];
+    y0 = t.clientY; x0 = t.clientX; t0 = performance.now(); dy = 0; armed = true;
+  }, { passive: true });
+
+  d.addEventListener("touchmove", (e) => {
+    if (!armed) return;
+    const t = e.touches[0];
+    const raw = t.clientY - y0;
+    if (!dragging) {
+      if (raw < -4 || Math.abs(t.clientX - x0) > Math.abs(raw)) { armed = false; return; } // vuốt lên / ngang: để trình duyệt cuộn
+      if (raw < 8) return;
+      dragging = true;
+      d.classList.add("dragging");
+    }
+    e.preventDefault(); // đang kéo hộp thoại: không cuộn trang
+    dy = Math.max(0, raw - 8);
+    d.style.transition = "none";
+    d.style.transform = `translateY(${dy}px)`;
+    d.style.setProperty("--drag", String(Math.min(1, dy / d.offsetHeight)));
+  }, { passive: false });
+
+  const end = () => {
+    if (!dragging) { armed = false; return; }
+    armed = dragging = false;
+    const speed = dy / Math.max(1, performance.now() - t0); // px/ms
+    if (dy > d.offsetHeight * 0.25 || (speed > 0.6 && dy > 40)) {
+      buzz();
+      d.style.transition = "transform .22s cubic-bezier(.4,0,1,1)";
+      d.style.transform = "translateY(105%)";
+      d.style.setProperty("--drag", "1");
+      setTimeout(() => { d.close(); reset(); }, 220);
+    } else {
+      d.style.transition = "transform .35s cubic-bezier(.3,1.5,.5,1)"; // bật về
+      d.style.transform = "";
+      d.style.removeProperty("--drag");
+      setTimeout(reset, 360);
+    }
+  };
+  d.addEventListener("touchend", end);
+  d.addEventListener("touchcancel", end);
+  d.addEventListener("close", reset);
 }
 
 /* ------------------------------------------------------------------ */
