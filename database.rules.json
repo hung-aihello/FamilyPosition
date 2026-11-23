@@ -9,19 +9,48 @@
           "$memberId": {
             ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $memberId.matches(/^[a-z0-9]{16}$/) && !root.child('families').child($familyId).child('banned').child($memberId).exists()",
             ".validate": "newData.hasChild('name')",
-            "name":      { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
-            "emoji":     { ".validate": "newData.isString() && newData.val().length <= 8" },
-            "color":     { ".validate": "newData.isString() && newData.val().matches(/^#[0-9a-f]{6}$/)" },
-            "sharing":   { ".validate": "newData.isBoolean()" },
-            "online":    { ".validate": "newData.isBoolean()" },
-            "lat":       { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
-            "lng":       { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
-            "acc":       { ".validate": "newData.isNumber() && newData.val() >= 0" },
-            "battery":   { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
-            "charging":  { ".validate": "newData.isBoolean()" },
-            "updatedAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
-            "joinedAt":  { ".validate": "newData.isNumber() && newData.val() <= now" },
-            "$other":    { ".validate": false }
+            "name":       { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
+            "emoji":      { ".validate": "newData.isString() && newData.val().length <= 8" },
+            "color":      { ".validate": "newData.isString() && newData.val().matches(/^#[0-9a-f]{6}$/)" },
+            "sharing":    { ".validate": "newData.isBoolean()" },
+            "online":     { ".validate": "newData.isBoolean()" },
+            "lat":        { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+            "lng":        { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
+            "acc":        { ".validate": "newData.isNumber() && newData.val() >= 0" },
+            "speed":      { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 400" },
+            "battery":    { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100" },
+            "charging":   { ".validate": "newData.isBoolean()" },
+            "place":      { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{10}$/)" },
+            "placeSince": { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "updatedAt":  { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "joinedAt":   { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "$other":     { ".validate": false }
+          }
+        },
+        "places": {
+          "$placeId": {
+            ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $placeId.matches(/^[a-z0-9]{10}$/)",
+            ".validate": "newData.hasChildren(['name', 'emoji', 'lat', 'lng', 'radius'])",
+            "name":   { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
+            "emoji":  { ".validate": "newData.isString() && newData.val().length <= 8" },
+            "lat":    { ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90" },
+            "lng":    { ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180" },
+            "radius": { ".validate": "newData.isNumber() && newData.val() >= 30 && newData.val() <= 2000" },
+            "by":     { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{16}$/)" },
+            "at":     { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "$other": { ".validate": false }
+          }
+        },
+        "events": {
+          ".indexOn": ["at"],
+          "$eventId": {
+            ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $eventId.matches(/^[-_0-9A-Za-z]{20}$/)",
+            ".validate": "newData.hasChildren(['m', 'type', 'place', 'at'])",
+            "m":      { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{16}$/) && !root.child('families').child($familyId).child('banned').child(newData.val()).exists()" },
+            "type":   { ".validate": "newData.val() === 'arrive' || newData.val() === 'leave'" },
+            "place":  { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{10}$/)" },
+            "at":     { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "$other": { ".validate": false }
           }
         }
       }

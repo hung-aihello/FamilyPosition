@@ -1,7 +1,7 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.7.0";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -13,6 +13,21 @@ const ONLINE_WINDOW = 2 * 60e3;
 const IDLE_WINDOW = 15 * 60e3;
 const POOR_ACCURACY = 1000;        // m — sai số lớn hơn mức này coi là định vị kém (thường là laptop)
 const GOOD_FIX_PROTECT = 10 * 60e3; // vị trí tốt trong 10 phút gần đây không bị định vị kém ghi đè
+
+// Địa điểm quen thuộc
+const PLACE_PRESETS = [
+  ["🏠", "Nhà", 100], ["🏫", "Trường", 200], ["🏢", "Công ty", 200], ["👵", "Nhà ông bà", 100],
+  ["🏥", "Bệnh viện", 200], ["🛒", "Chợ", 150], ["⚽", "Sân chơi", 150], ["☕", "Quán quen", 100],
+  ["⛪", "Nhà thờ", 150], ["🏋️", "Phòng tập", 100], ["🏖️", "Đi chơi", 400], ["⭐", "Chỗ quen", 150],
+];
+const PLACE_RADII = [[100, "Nhỏ · 100 m"], [200, "Vừa · 200 m"], [400, "Lớn · 400 m"]];
+const PLACE_EXIT_MARGIN = 50;   // phải ra xa thêm 50 m mới tính là "đã rời" — tránh nhấp nháy vào/ra
+const PLACE_MAX_ACC = 150;      // chỉ xét vào/ra khi sai số GPS ≤ 150 m
+const PLACE_QUIET = 5 * 60e3;   // địa điểm vừa tạo/sửa: không ghi "đã đến" cho những người đang sẵn ở đó
+const EVENT_KEEP = 3 * 864e5;   // dòng thời gian giữ 3 ngày
+const MOVING_SPEED = 1.5;       // m/s (~5 km/h) trở lên coi là đang di chuyển
+const WALK_SPEED = 2.5;         // m/s (~9 km/h) trở xuống coi là đi bộ
+const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 const AVATARS = [
   ["👩", "#fecdd3"], ["👨", "#bfdbfe"], ["👵", "#e9d5ff"], ["👴", "#fde68a"],
@@ -81,6 +96,18 @@ function toast(msg, ms = 2800) {
 }
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+// Rung nhẹ khi chạm (Android). iOS không hỗ trợ → bỏ qua.
+const buzz = (ms = 8) => { try { navigator.vibrate?.(ms); } catch { /* bỏ qua */ } };
+// Giờ:phút cho hôm nay, "hôm qua 17:40", hoặc ngày/tháng.
+function clockTime(ts) {
+  const d = new Date(ts), today = new Date();
+  const hm = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+  const days = Math.round((new Date(today.toDateString()) - new Date(d.toDateString())) / 864e5);
+  if (days === 0) return hm;
+  if (days === 1) return `hôm qua ${hm}`;
+  return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
 }
 function relTime(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -372,6 +399,14 @@ let userMovedMap = false;  // người dùng đã tự kéo bản đồ thì kh�
 let autoFitCount = 0;      // số người có vị trí ở lần tự zoom gần nhất
 let wakeLock = null;
 let kicked = false;
+let places = {};           // placeId -> { name, emoji, lat, lng, radius, by, at }
+let placesLoaded = false;
+let events = [];           // dòng thời gian: [{ id, m, type: "arrive"|"leave", place, at }]
+const placeLayers = new Map(); // placeId -> { circle, marker, key }
+let selectedId = null;     // đang xem thẻ chi tiết của ai
+let placing = null;        // đang đặt địa điểm: { id, emoji, name, radius, nameEdited }
+let previewCircle = null;
+let prevFix = null;        // lần định vị trước, để tự tính tốc độ khi máy không báo
 
 // Bản ghi của mình bị xoá từ phía quản trị (reason "removed") hoặc server từ chối cho vào
 // nhóm vì ID bị cấm (reason "banned") → thoát về màn hình chào.
@@ -404,6 +439,8 @@ function syncFromServer(mine) {
 
 const now = () => Date.now() + serverOffset;
 const isDesktop = () => matchMedia("(min-width: 720px)").matches;
+// Tắt chia sẻ vị trí → xoá mọi thứ lộ ra vị trí trên server.
+const HIDDEN_POS = { lat: null, lng: null, acc: null, speed: null, place: null, placeSince: null };
 
 async function enterMain(opts = {}) {
   showScreen("main");
@@ -420,7 +457,7 @@ async function enterMain(opts = {}) {
     // Chỉ đặt joinedAt khi thật sự mới vào nhóm (member === false). Bản cài từ phiên bản cũ
     // (member === undefined) đã có joinedAt từ trước — đừng ghi đè.
     if (state.member === false) initial.joinedAt = fb.serverTimestamp();
-    if (!state.sharing) Object.assign(initial, { lat: null, lng: null, acc: null });
+    if (!state.sharing) Object.assign(initial, { ...HIDDEN_POS });
     // Server từ chối (ID bị cấm) → không cho ở lại màn hình bản đồ.
     fb.update(meRef(), initial).catch((e) => (isDenied(e) ? onKicked("banned") : onWriteError(e)));
   } else if (opts.grant) {
@@ -450,7 +487,30 @@ async function enterMain(opts = {}) {
     }
     render();
     if (firstLoad && myPos) pushPosition(false); // GPS có trước dữ liệu nhóm → giờ mới gửi
+    if (firstLoad) trackMyPlace();
   });
+  fb.onValue(famRef("places"), (s) => {
+    places = {};
+    for (const [id, p] of Object.entries(s.val() || {})) {
+      if (p && typeof p.lat === "number" && typeof p.lng === "number" && p.radius > 0) places[id] = p;
+    }
+    placesLoaded = true;
+    renderPlaces();
+    trackMyPlace();
+    render();
+  });
+  // Dòng thời gian: chỉ tải 2 ngày gần nhất (hiển thị "Hôm nay").
+  fb.onValue(fb.query(famRef("events"), fb.orderByChild("at"), fb.startAt(Date.now() - 2 * 864e5)), (s) => {
+    events = [];
+    s.forEach((c) => { const v = c.val(); if (v) events.push({ id: c.key, ...v }); });
+    renderFeed();
+  });
+  // Dọn sự kiện cũ (ai mở app cũng dọn giúp) — giữ database gọn.
+  fb.get(fb.query(famRef("events"), fb.orderByChild("at"), fb.endAt(Date.now() - EVENT_KEEP))).then((s) => {
+    const old = {};
+    s.forEach((c) => { old[c.key] = null; });
+    if (Object.keys(old).length) fb.update(famRef("events"), old).catch(() => {});
+  }).catch(() => {});
 
   if (navigator.getBattery) {
     navigator.getBattery().then((b) => {
@@ -489,6 +549,9 @@ function initMap() {
   }).addTo(map);
   map.attributionControl.setPrefix(false);
   map.on("dragstart", () => { userMovedMap = true; });
+  map.on("zoomend", () => renderMarkers()); // tách các ghim chồng lên nhau theo mức zoom
+  map.on("click", () => { if (selectedId && !placing) closeDetail(); });
+  map.on("move", () => { if (placing) updatePreview(); });
 }
 
 function observeSheet() {
@@ -550,8 +613,11 @@ function render() {
   if (!map) return;
   renderMarkers();
   renderList();
+  renderFeed();
+  renderPlaceHint();
+  renderDetail();
   // Tự zoom để thấy cả nhà mỗi khi có thêm người xuất hiện (cho đến khi người dùng tự kéo bản đồ).
-  if (!userMovedMap) {
+  if (!userMovedMap && !selectedId && !placing) {
     const pts = locatedMembers();
     if (pts.length > autoFitCount) {
       focusOn(pts, autoFitCount > 0);
@@ -560,14 +626,53 @@ function render() {
   }
 }
 
+/* ---- Trạng thái hiển thị của một người ---- */
+
+// Người này đang ở địa điểm quen nào? Ưu tiên điều máy của họ đã báo (có giờ đến),
+// nếu không thì tự tính theo toạ độ (máy họ chạy bản cũ / chưa kịp báo).
+function memberPlace(m) {
+  if (m.sharing === false || typeof m.lat !== "number") return null;
+  const told = m.place && places[m.place];
+  if (told && distanceMeters(m, told) <= told.radius + PLACE_EXIT_MARGIN + Math.min(m.acc || 0, 200)) {
+    return { id: m.place, ...told, since: m.placeSince || null };
+  }
+  const id = placeAt(m, null);
+  return id ? { id, ...places[id], since: null } : null;
+}
+
+function movingText(m, id) {
+  const speed = id === state.memberId && gpsOn() && myPos ? myPos.speed : m.speed;
+  const fresh = id === state.memberId || now() - (m.updatedAt || 0) < 3 * 60e3;
+  if (!(speed >= MOVING_SPEED) || !fresh) return null;
+  return speed <= WALK_SPEED ? "🚶 Đang đi bộ" : `🛵 Đang di chuyển · ${Math.round(speed * 3.6)} km/h`;
+}
+
+const placeLabel = (pl) => `${pl.emoji || "📍"} Ở ${pl.name}${pl.since ? ` từ ${clockTime(pl.since)}` : ""}`;
+const avatarHtml = (m, cls = "") =>
+  `<span class="avatar ${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")}">${escapeHtml(m.emoji || "🙂")}</span>`;
+
+/* ---- Ghim trên bản đồ ---- */
+
 function renderMarkers() {
-  const located = locatedMembers();
+  const located = locatedMembers().sort((a, b) => a.id.localeCompare(b.id));
+
+  // Nhiều người cùng một chỗ (cả nhà ở nhà) → xếp ghim cạnh nhau thay vì chồng lên.
+  const groups = [];
+  for (const m of located) {
+    const pt = map.latLngToLayerPoint([m.lat, m.lng]);
+    const g = groups.find((x) => x.pt.distanceTo(pt) < 44);
+    if (g) g.items.push(m); else groups.push({ pt, items: [m] });
+  }
+  const dx = new Map();
+  for (const g of groups) g.items.forEach((m, i) => dx.set(m.id, (i - (g.items.length - 1) / 2) * 50));
+
   const seen = new Set();
   for (const m of located) {
     seen.add(m.id);
     const isMe = m.id === state.memberId;
     const stale = !isMe && now() - (m.updatedAt || 0) > IDLE_WINDOW;
-    const html = `<div class="pin${isMe ? " me" : ""}${stale ? " stale" : ""}" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
+    const cls = `pin${isMe ? " me" : ""}${stale ? " stale" : ""}${selectedId === m.id ? " selected" : ""}`;
+    const html = `<div class="${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")};--dx:${dx.get(m.id) || 0}px">
       <div class="pin-bubble">${escapeHtml(m.emoji || "🙂")}</div>
       <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div></div>`;
     let entry = markers.get(m.id);
@@ -576,11 +681,11 @@ function renderMarkers() {
         icon: L.divIcon({ html, className: "", iconSize: [56, 66], iconAnchor: [28, 66] }),
         keyboard: true, title: m.name, zIndexOffset: isMe ? 1000 : 0,
       }).addTo(map);
-      marker.on("click", () => focusOn([marker.getLatLng()])); // vị trí hiện tại, không phải lúc tạo marker
-      entry = { marker, html };
+      marker.on("click", (e) => { L.DomEvent.stopPropagation(e); openDetail(m.id); });
+      entry = { marker, html, target: [m.lat, m.lng] };
       markers.set(m.id, entry);
     } else {
-      entry.marker.setLatLng([m.lat, m.lng]);
+      slideMarker(entry, [m.lat, m.lng]);
       entry.marker.getElement()?.setAttribute("title", m.name);
       if (entry.html !== html) {
         entry.marker.setIcon(L.divIcon({ html, className: "", iconSize: [56, 66], iconAnchor: [28, 66] }));
@@ -589,7 +694,7 @@ function renderMarkers() {
     }
   }
   for (const [id, entry] of markers) {
-    if (!seen.has(id)) { entry.marker.remove(); markers.delete(id); }
+    if (!seen.has(id)) { cancelAnimationFrame(entry.raf); entry.marker.remove(); markers.delete(id); }
   }
 
   if (myPos && gpsOn()) {
@@ -606,8 +711,38 @@ function renderMarkers() {
   }
 }
 
+// Ghim trượt mượt tới vị trí mới thay vì nhảy cóc.
+function slideMarker(entry, to) {
+  if (entry.target && entry.target[0] === to[0] && entry.target[1] === to[1]) return;
+  entry.target = to;
+  cancelAnimationFrame(entry.raf);
+  const from = entry.marker.getLatLng();
+  const far = from.distanceTo(to) > 5000 || !map.getBounds().pad(0.5).contains(from);
+  if (reducedMotion() || far || document.visibilityState !== "visible") { entry.marker.setLatLng(to); return; }
+  const t0 = performance.now(), D = 1000;
+  const step = (t) => {
+    const k = Math.min(1, (t - t0) / D), e = 1 - (1 - k) ** 3;
+    entry.marker.setLatLng([from.lat + (to[0] - from.lat) * e, from.lng + (to[1] - from.lng) * e]);
+    if (k < 1) entry.raf = requestAnimationFrame(step);
+  };
+  entry.raf = requestAnimationFrame(step);
+}
+
+/* ---- Danh sách cả nhà ---- */
+
 function renderList() {
   const list = $("#memberList");
+  if (!membersLoaded) {
+    // Khung chờ thay vì báo "Chưa có ai" khi dữ liệu còn đang tải.
+    if (!list.querySelector(".skeleton")) {
+      list.innerHTML = `<li class="member skeleton" aria-hidden="true"><span class="member-main"><span class="avatar"></span>
+        <span class="member-info sk-info"><span class="sk-line"></span><span class="sk-line"></span></span></span></li>`.repeat(3);
+    }
+    $("#emptyState").hidden = true;
+    return;
+  }
+  list.removeAttribute("aria-busy");
+
   const entries = Object.entries(allMembers()).filter(([, m]) => m && m.name);
   entries.sort(([a, ma], [b, mb]) => {
     if (a === state.memberId) return -1;
@@ -620,25 +755,31 @@ function renderList() {
 
   list.innerHTML = "";
   const here = myLocation();
+  const herePlace = here && memberPlace(here);
   for (const [id, m] of entries) {
     const isMe = id === state.memberId;
     const status = memberStatus(m, id);
     const hasPos = m.sharing !== false && typeof m.lat === "number";
+    const pl = hasPos ? memberPlace(m) : null;
+    const moving = hasPos && !pl ? movingText(m, id) : null;
 
-    const meta = [];
+    const meta = []; // các đoạn HTML đã escape
+    const text = (s) => meta.push(escapeHtml(s));
+    if (pl) meta.push(`<span class="place-tag">${escapeHtml(placeLabel(pl))}</span>`);
+    else if (moving) meta.push(`<span class="place-tag">${escapeHtml(moving)}</span>`);
     if (isMe) {
-      if (!state.sharing) meta.push("Đã tắt chia sẻ vị trí");
-      else if (!gpsOn()) meta.push(hasPos ? `Máy này chỉ xem · vị trí từ máy khác, ${relTime(now() - (m.updatedAt || 0))}` : "Máy này chỉ xem");
-      else if (geoError) meta.push(geoError);
-      else if (!myPos) meta.push("Đang tìm vị trí…");
-      else meta.push("Đang chia sẻ vị trí");
+      if (!state.sharing) text("Đã tắt chia sẻ vị trí");
+      else if (!gpsOn()) text(hasPos ? `Máy này chỉ xem · vị trí từ máy khác, ${relTime(now() - (m.updatedAt || 0))}` : "Máy này chỉ xem");
+      else if (geoError) text(geoError);
+      else if (!myPos) text("Đang tìm vị trí…");
+      else if (!pl) text("Đang chia sẻ vị trí");
     } else if (m.sharing === false) {
-      meta.push("Đã tắt chia sẻ vị trí");
+      text("Đã tắt chia sẻ vị trí");
     } else if (!hasPos) {
-      meta.push("Chưa có vị trí");
+      text("Chưa có vị trí");
     } else {
-      meta.push(status === "on" ? "Đang mở app" : relTime(now() - (m.updatedAt || 0)));
-      if (here) meta.push(`cách ${formatDistance(distanceMeters(here, m))}`);
+      text(status === "on" ? "Đang mở app" : relTime(now() - (m.updatedAt || 0)));
+      if (here && !(pl && herePlace && pl.id === herePlace.id)) text(`cách ${formatDistance(distanceMeters(here, m))}`);
     }
     if (!isMe && typeof m.battery === "number") {
       const low = m.battery <= 20 && !m.charging;
@@ -648,24 +789,21 @@ function renderList() {
     const li = document.createElement("li");
     li.className = "member";
     li.innerHTML = `
-      <button class="member-main" type="button" ${hasPos ? "" : "disabled"}
-              aria-label="${escapeHtml(isMe ? "Vị trí của tôi" : `Xem vị trí của ${m.name}`)}">
+      <button class="member-main" type="button" aria-label="${escapeHtml(isMe ? "Xem chi tiết của tôi" : `Xem chi tiết của ${m.name}`)}">
         <span class="avatar" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
           ${escapeHtml(m.emoji || "🙂")}<span class="status ${status === "on" ? "on" : status === "idle" ? "idle" : ""}"></span>
         </span>
         <span class="member-info">
           <span class="member-name">${escapeHtml(m.name)}${isMe ? ' <span class="me">(bạn)</span>' : ""}</span>
-          <span class="member-meta">${meta.map((x) => (x.startsWith("<span") ? x : escapeHtml(x))).join(" · ")}</span>
+          <span class="member-meta">${meta.join(" · ")}</span>
         </span>
       </button>`;
-    li.querySelector(".member-main").addEventListener("click", () => {
-      if (hasPos) focusOn([m]);
-    });
+    li.querySelector(".member-main").addEventListener("click", () => openDetail(id));
 
     if (!isMe && hasPos) {
       const go = document.createElement("a");
       go.className = "go-btn";
-      go.href = `https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`;
+      go.href = directionsUrl(m);
       go.target = "_blank";
       go.rel = "noopener";
       go.setAttribute("aria-label", `Chỉ đường tới ${m.name}`);
@@ -674,6 +812,418 @@ function renderList() {
     }
     list.appendChild(li);
   }
+}
+
+const directionsUrl = (p) => `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+
+/* ---- Dòng thời gian "Hôm nay" ---- */
+
+function renderFeed() {
+  const hasPlaces = Object.keys(places).length > 0;
+  $("#feed").hidden = !membersLoaded || !hasPlaces;
+  if ($("#feed").hidden) return;
+
+  const startOfDay = new Date(new Date().toDateString()).getTime();
+  const rows = [];
+  const sorted = events
+    .filter((e) => e.at >= startOfDay && members[e.m]?.name && places[e.place])
+    .sort((a, b) => b.at - a.at);
+  for (const e of sorted) {
+    // Cùng một người dùng 2 máy có thể ghi trùng → bỏ bản trùng trong vòng 10 phút.
+    if (rows.some((r) => r.m === e.m && r.type === e.type && r.place === e.place && Math.abs(r.at - e.at) < 10 * 60e3)) continue;
+    rows.push(e);
+    if (rows.length >= 12) break;
+  }
+
+  $("#feedEmpty").hidden = rows.length > 0;
+  $("#feedList").innerHTML = rows.map((e) => {
+    const m = members[e.m], pl = places[e.place];
+    const who = e.m === state.memberId ? "Bạn" : m.name;
+    const verb = e.type === "leave" ? "đã rời" : pl.emoji === "🏠" ? "đã về" : "đã đến";
+    return `<li class="feed-item">${avatarHtml(m, "avatar-sm")}
+      <span class="feed-text"><strong>${escapeHtml(who)}</strong> ${verb} <strong>${escapeHtml(`${pl.emoji || "📍"} ${pl.name}`)}</strong></span>
+      <time class="feed-time" datetime="${new Date(e.at).toISOString()}">${escapeHtml(clockTime(e.at))}</time></li>`;
+  }).join("");
+}
+
+function renderPlaceHint() {
+  $("#placeHint").hidden = !membersLoaded || !placesLoaded || Object.keys(places).length > 0 || !!state.placeHintDismissed;
+}
+
+/* ---- Thẻ chi tiết một người ---- */
+
+function openDetail(id) {
+  buzz();
+  selectedId = id;
+  $("#sheet").classList.remove("collapsed");
+  $("#sheetHandle").setAttribute("aria-expanded", "true");
+  renderDetail();
+  renderMarkers();
+  const m = allMembers()[id];
+  if (m && m.sharing !== false && typeof m.lat === "number") {
+    // Chờ sheet đổi chiều cao xong rồi mới căn giữa.
+    requestAnimationFrame(() => focusOn([m]));
+  }
+  $("#memberDetail").scrollIntoView?.({ block: "start" });
+  $("#detailBack").focus({ preventScroll: true });
+}
+
+function closeDetail() {
+  if (!selectedId) return;
+  selectedId = null;
+  $("#memberDetail").hidden = true;
+  $("#sheetHome").hidden = false;
+  renderMarkers();
+}
+
+const addrCache = new Map(); // "lat,lng" làm tròn ~10 m -> Promise<string|null>
+let addrLast = { id: null, key: null, text: null, at: 0 };
+
+function renderDetail() {
+  if (!selectedId) return;
+  const id = selectedId;
+  const m = allMembers()[id];
+  if (!m?.name) return closeDetail();
+  $("#sheetHome").hidden = true;
+  $("#memberDetail").hidden = false;
+
+  const isMe = id === state.memberId;
+  const hasPos = m.sharing !== false && typeof m.lat === "number";
+  const status = memberStatus(m, id);
+  const pl = hasPos ? memberPlace(m) : null;
+  const moving = hasPos && !pl ? movingText(m, id) : null;
+
+  const av = $("#detailAvatar");
+  av.style.setProperty("--c", m.color || "#ccfbf1");
+  av.textContent = m.emoji || "🙂";
+  $("#detailName").textContent = isMe ? `${m.name} (bạn)` : m.name;
+
+  const st = $("#detailStatus");
+  st.classList.toggle("off", !pl && !moving);
+  st.textContent = pl ? placeLabel(pl)
+    : moving || (m.sharing === false ? "Đã tắt chia sẻ vị trí" : !hasPos ? "Chưa có vị trí" : status === "on" ? "Đang mở app" : "Không ở địa điểm quen");
+
+  const facts = [];
+  const fact = (icon, html, extra = "") => facts.push(`<li><span class="fi" aria-hidden="true">${icon}</span><span class="fv ${extra}">${html}</span></li>`);
+  let addrKey = null;
+  if (hasPos) {
+    addrKey = `${m.lat.toFixed(4)},${m.lng.toFixed(4)}`;
+    const known = addrLast.id === id ? addrLast.text : null;
+    fact("📍", escapeHtml(known || "Đang tìm địa chỉ…"), known ? "addr" : "addr loading");
+    const age = now() - (m.updatedAt || 0);
+    fact("🕒", escapeHtml(isMe && gpsOn() && myPos ? "Đang chia sẻ từ máy này"
+      : status === "on" ? "Đang mở app" : `Cập nhật ${relTime(age)}${m.updatedAt ? ` (${clockTime(m.updatedAt)})` : ""}`));
+    const here = myLocation();
+    if (!isMe && here) fact("📏", escapeHtml(`Cách bạn ${formatDistance(distanceMeters(here, m))}`));
+    if (m.acc) fact("🎯", escapeHtml(`Sai số khoảng ±${formatDistance(m.acc)}`));
+  }
+  if (!isMe && typeof m.battery === "number") {
+    const low = m.battery <= 20 && !m.charging;
+    fact(m.charging ? "⚡" : "🔋", `<span class="${low ? "low" : ""}">${escapeHtml(m.charging ? `Đang sạc · ${m.battery}%` : `Pin ${m.battery}%${low ? " — sắp hết" : ""}`)}</span>`);
+  }
+  $("#detailFacts").innerHTML = facts.join("");
+  $("#detailFacts").hidden = !facts.length;
+
+  $("#detailGo").hidden = isMe || !hasPos;
+  if (hasPos) $("#detailGo").href = directionsUrl(m);
+  $("#detailShare").hidden = !hasPos;
+  $("#detailSavePlace").hidden = !hasPos || !!pl;
+
+  if (hasPos) showAddress(id, m, addrKey);
+}
+
+// Địa chỉ gần đúng từ OpenStreetMap (Nominatim). Chỉ tra khi mở thẻ chi tiết, có bộ nhớ đệm,
+// và không tra lại quá 1 lần / 15 giây khi người đó đang di chuyển (theo chính sách sử dụng).
+function showAddress(id, m, key) {
+  const paint = (text) => {
+    if (selectedId !== id) return;
+    const el = $("#detailFacts .addr");
+    if (!el) return;
+    el.classList.remove("loading");
+    el.textContent = text || "Không rõ địa chỉ";
+  };
+  if (addrLast.id === id && addrLast.key === key) return;
+  if (addrLast.id === id && Date.now() - addrLast.at < 15e3 && !addrCache.has(key)) return;
+  addrLast = { id, key, text: addrLast.id === id ? addrLast.text : null, at: Date.now() };
+  if (!addrCache.has(key)) {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=vi&lat=${m.lat.toFixed(5)}&lon=${m.lng.toFixed(5)}`;
+    addrCache.set(key, fetch(url).then((r) => (r.ok ? r.json() : null)).then(shortAddress).catch(() => null));
+  }
+  addrCache.get(key).then((text) => {
+    if (addrLast.id === id && addrLast.key === key) addrLast.text = text;
+    paint(text);
+  });
+}
+
+function shortAddress(j) {
+  const a = j?.address;
+  if (!a) return j?.display_name?.split(", ").slice(0, 3).join(", ") || null;
+  const street = [a.house_number, a.road].filter(Boolean).join(" ");
+  const parts = [
+    a.amenity || a.shop || a.tourism || a.leisure || a.office,
+    street,
+    a.quarter || a.suburb || a.neighbourhood || a.village || a.hamlet,
+    a.city_district || a.district || a.county || a.town,
+    a.city || a.state,
+  ];
+  return [...new Set(parts.filter(Boolean))].slice(0, 3).join(", ") || null;
+}
+
+async function shareLocationOf(id) {
+  const m = allMembers()[id];
+  if (!m || typeof m.lat !== "number") return;
+  const url = `https://www.google.com/maps/search/?api=1&query=${m.lat},${m.lng}`;
+  const who = id === state.memberId ? "Mình" : m.name;
+  if (navigator.share) {
+    try { await navigator.share({ title: "Vị trí", text: `${who} đang ở đây 📍`, url }); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(url); toast("Đã sao chép vị trí ✓"); }
+  catch { prompt("Sao chép đường dẫn vị trí:", url); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Địa điểm quen thuộc                                                 */
+/* ------------------------------------------------------------------ */
+
+// Điểm p đang ở địa điểm nào. `current` = địa điểm đang ở (được nới thêm biên để không nhấp nháy).
+function placeAt(p, current) {
+  const cur = current && places[current];
+  if (cur && distanceMeters(p, cur) <= cur.radius + PLACE_EXIT_MARGIN) return current;
+  let best = null, bestD = Infinity;
+  for (const [id, pl] of Object.entries(places)) {
+    const d = distanceMeters(p, pl);
+    if (d <= pl.radius && d - pl.radius < bestD) { best = id; bestD = d - pl.radius; }
+  }
+  return best;
+}
+
+// Máy đang lấy GPS của tôi tự phát hiện mình đến/rời địa điểm → ghi lên hồ sơ + dòng thời gian.
+function trackMyPlace() {
+  if (!membersLoaded || !placesLoaded || !gpsOn() || !myPos || myPos.acc > PLACE_MAX_ACC || kicked) return;
+  const stored = members[state.memberId];
+  if (!stored) return;
+  const was = stored.place && places[stored.place] ? stored.place : null;
+  const next = placeAt(myPos, was);
+  if (next === was && (stored.place || null) === was) return;
+
+  fb.update(meRef(), { place: next, placeSince: next ? fb.serverTimestamp() : null }).catch(onWriteError);
+  if (was && next !== was) logEvent("leave", was);
+  if (next && next !== was) logEvent("arrive", next);
+  // Cập nhật ngay trên máy để lần định vị kế tiếp không ghi trùng trước khi server phản hồi.
+  members[state.memberId] = { ...stored, place: next, placeSince: next ? now() : null };
+}
+
+function logEvent(type, placeId) {
+  const pl = places[placeId];
+  if (!pl || now() - (pl.at || 0) < PLACE_QUIET) return; // vừa tạo địa điểm: người đang ở đó không tính là "vừa đến"
+  fb.push(famRef("events"), { m: state.memberId, type, place: placeId, at: fb.serverTimestamp() }).catch(onWriteError);
+}
+
+function renderPlaces() {
+  if (!map) return;
+  const seen = new Set();
+  for (const [id, pl] of Object.entries(places)) {
+    if (placing?.id === id) continue; // đang sửa thì ẩn bản cũ
+    seen.add(id);
+    const key = `${pl.lat},${pl.lng},${pl.radius},${pl.emoji},${pl.name}`;
+    const old = placeLayers.get(id);
+    if (old?.key === key) continue;
+    old?.circle.remove(); old?.marker.remove();
+    const circle = L.circle([pl.lat, pl.lng], {
+      radius: pl.radius, className: "place-circle", weight: 1.5, dashArray: "4 6", fillOpacity: 0.07, interactive: false,
+    }).addTo(map);
+    // Nhãn nằm ở mép trên vòng tròn, để không bị ghim của người đang ở đó che mất.
+    const marker = L.marker([pl.lat + pl.radius / 111320, pl.lng], {
+      icon: L.divIcon({
+        className: "", iconSize: [0, 0], iconAnchor: [0, 0],
+        html: `<div class="place-pin"><span>${escapeHtml(pl.emoji || "📍")}</span>${escapeHtml(pl.name)}</div>`,
+      }),
+      zIndexOffset: -1000, keyboard: false, title: pl.name,
+    }).addTo(map);
+    marker.on("click", (e) => { L.DomEvent.stopPropagation(e); startPlacing({ id }); });
+    placeLayers.set(id, { circle, marker, key });
+  }
+  for (const [id, layer] of placeLayers) {
+    if (!seen.has(id)) { layer.circle.remove(); layer.marker.remove(); placeLayers.delete(id); }
+  }
+}
+
+function openPlaces() {
+  buzz();
+  const ul = $("#placeList");
+  const all = allMembers();
+  const items = Object.entries(places).sort(([, a], [, b]) => (a.at || 0) - (b.at || 0));
+  ul.innerHTML = items.length ? "" : `<li class="muted">Chưa có địa điểm nào.</li>`;
+  for (const [id, pl] of items) {
+    const here = Object.values(all).filter((m) => m?.name && memberPlace(m)?.id === id);
+    const li = document.createElement("li");
+    li.innerHTML = `<button class="place-item" type="button" aria-label="${escapeHtml(`Sửa ${pl.name}`)}">
+      <span class="hint-icon" aria-hidden="true">${escapeHtml(pl.emoji || "📍")}</span>
+      <span class="member-info">
+        <span class="member-name">${escapeHtml(pl.name)}</span>
+        <span class="member-meta">${here.length ? `${here.length} người đang ở đây` : `Phạm vi ${formatDistance(pl.radius)}`}</span>
+        ${here.length ? `<span class="place-who">${here.map((m) => `<span style="--c:${escapeHtml(m.color || "#ccfbf1")}">${escapeHtml(m.emoji || "🙂")}</span>`).join("")}</span>` : ""}
+      </span>
+      <span class="chev" aria-hidden="true">›</span></button>`;
+    li.querySelector("button").addEventListener("click", () => { $("#placesDialog").close(); startPlacing({ id }); });
+    ul.appendChild(li);
+  }
+  $("#placesDialog").showModal();
+}
+
+// Mở chế độ đặt địa điểm. { id } = sửa địa điểm có sẵn; { at } = bắt đầu tại toạ độ này.
+function startPlacing({ id = null, at = null } = {}) {
+  buzz();
+  const pl = id ? places[id] : null;
+  const used = new Set(Object.values(places).map((p) => p.name));
+  const preset = PLACE_PRESETS.find(([, n]) => !used.has(n)) || PLACE_PRESETS[PLACE_PRESETS.length - 1];
+  placing = {
+    id,
+    emoji: pl?.emoji || preset[0],
+    name: pl?.name ?? preset[1],
+    radius: pl?.radius || preset[2],
+    nameEdited: !!pl,
+  };
+  closeDetail();
+  $("#main").classList.add("placing");
+  $("#placeEditor").hidden = false;
+  $("#placeEditorTitle").textContent = pl ? "Sửa địa điểm" : "Thêm địa điểm";
+  $("#placeDelete").hidden = !pl;
+  $("#placeDelete").textContent = "Xoá địa điểm này";
+  delete $("#placeDelete").dataset.armed;
+  $("#placeName").value = placing.name;
+  renderPlaceEmojis();
+  renderPlaceRadius();
+  renderPlaces();
+
+  const start = pl || at || myLocation() || map.getCenter();
+  requestAnimationFrame(() => {
+    centerOnTarget(start, Math.max(map.getZoom(), pl ? 16 : 17));
+    updatePreview();
+    $("#placeEditorTitle").focus({ preventScroll: true });
+  });
+}
+
+function stopPlacing() {
+  placing = null;
+  previewCircle?.remove();
+  previewCircle = null;
+  $("#placeEditor").hidden = true;
+  $("#main").classList.remove("placing");
+  renderPlaces();
+  render();
+}
+
+function renderPlaceEmojis() {
+  const grid = $("#placeEmojiGrid");
+  grid.innerHTML = "";
+  for (const [emoji, name, radius] of PLACE_PRESETS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = emoji;
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-label", name);
+    b.setAttribute("aria-checked", String(emoji === placing.emoji));
+    b.addEventListener("click", () => {
+      buzz();
+      placing.emoji = emoji;
+      // Chưa tự đặt tên → gợi ý tên + phạm vi hợp với biểu tượng.
+      if (!placing.nameEdited) { $("#placeName").value = name; placing.radius = radius; renderPlaceRadius(); }
+      for (const o of grid.children) o.setAttribute("aria-checked", String(o === b));
+      updatePreview();
+    });
+    grid.appendChild(b);
+  }
+}
+
+function renderPlaceRadius() {
+  const seg = $("#placeRadius");
+  seg.innerHTML = "";
+  const opts = PLACE_RADII.some(([r]) => r === placing.radius) ? PLACE_RADII : [...PLACE_RADII, [placing.radius, `${placing.radius} m`]];
+  for (const [r, label] of opts) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(r === placing.radius));
+    b.addEventListener("click", () => {
+      buzz();
+      placing.radius = r;
+      for (const o of seg.children) o.setAttribute("aria-checked", String(o === b));
+      updatePreview(true);
+    });
+    seg.appendChild(b);
+  }
+}
+
+// Điểm trên màn hình mà ghim đang chỉ vào: giữa phần bản đồ còn nhìn thấy (trên tấm bảng).
+function targetPoint() {
+  const size = map.getSize();
+  if (isDesktop()) return L.point(size.x / 2, size.y / 2);
+  const panelH = $("#placePanel").getBoundingClientRect().height;
+  return L.point(size.x / 2, Math.max(120, (size.y - panelH) / 2 + 10));
+}
+
+function centerOnTarget(latlng, zoom) {
+  const size = map.getSize(), pt = targetPoint();
+  const offset = L.point(size.x / 2 - pt.x, size.y / 2 - pt.y);
+  const ll = L.latLng(latlng.lat, latlng.lng);
+  map.setView(map.unproject(map.project(ll, zoom).add(offset), zoom), zoom, { animate: !reducedMotion() });
+}
+
+function updatePreview(fitRadius = false) {
+  if (!placing) return;
+  const pt = targetPoint();
+  const ch = $("#crosshair");
+  ch.style.left = `${pt.x}px`;
+  ch.style.top = `${pt.y}px`;
+  $("#crosshairEmoji").innerHTML = `<span class="crosshair-emoji">${escapeHtml(placing.emoji)}</span>`;
+  const c = map.containerPointToLatLng(pt);
+  if (!previewCircle) {
+    previewCircle = L.circle(c, { radius: placing.radius, className: "place-circle preview", weight: 2, fillOpacity: 0.12, interactive: false }).addTo(map);
+  } else {
+    previewCircle.setLatLng(c).setRadius(placing.radius);
+  }
+  // Phạm vi lớn hơn khung nhìn → lùi zoom để thấy hết vòng tròn.
+  if (fitRadius) {
+    const edge = map.latLngToContainerPoint(L.latLng(c.lat, c.lng).toBounds(placing.radius * 2).getNorthEast());
+    if (edge.y < 60 || edge.x > map.getSize().x - 10) centerOnTarget(c, map.getZoom() - 1);
+  }
+}
+
+function savePlace() {
+  const name = $("#placeName").value.trim().slice(0, 24);
+  if (!name) { $("#placeName").focus(); return toast("Đặt tên cho địa điểm nhé (ví dụ: Nhà)."); }
+  const c = map.containerPointToLatLng(targetPoint());
+  const id = placing.id || randomString(10, ID_ALPHABET);
+  const old = places[id];
+  const data = {
+    name, emoji: placing.emoji, radius: placing.radius,
+    lat: +c.lat.toFixed(6), lng: +c.lng.toFixed(6),
+    by: old?.by || state.memberId,
+    at: fb.serverTimestamp(),
+  };
+  fb.set(famRef(`places/${id}`), data).catch(onWriteError);
+  buzz(15);
+  toast(`Đã lưu ${placing.emoji} ${name} ✓`);
+  state.placeHintDismissed = true;
+  saveState();
+  stopPlacing();
+}
+
+function deletePlace() {
+  const btn = $("#placeDelete");
+  if (!btn.dataset.armed) { // chạm 2 lần để xoá — không cần hộp thoại xác nhận
+    btn.dataset.armed = "1";
+    btn.textContent = "Chạm lần nữa để xoá";
+    buzz(20);
+    return;
+  }
+  const pl = places[placing.id];
+  fb.remove(famRef(`places/${placing.id}`)).catch(onWriteError);
+  toast(`Đã xoá ${pl?.emoji || ""} ${pl?.name || "địa điểm"}`);
+  stopPlacing();
 }
 
 function updateStatus() {
@@ -712,8 +1262,18 @@ function stopWatching() {
 
 function onPosition(p) {
   geoError = null;
-  myPos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy || 0) };
+  const fix = { lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy || 0), t: p.timestamp || Date.now() };
+  // Tốc độ: máy báo thì dùng, không thì tự tính từ 2 lần định vị (chỉ khi cả hai đủ chính xác).
+  let speed = Number.isFinite(p.coords.speed) ? p.coords.speed : null;
+  if (speed === null && prevFix && fix.acc <= 50 && prevFix.acc <= 50) {
+    const dt = (fix.t - prevFix.t) / 1000;
+    if (dt >= 3 && dt <= 120) speed = distanceMeters(prevFix, fix) / dt;
+  }
+  if (speed !== null && speed > 70) speed = null; // > 250 km/h: GPS nhảy, không phải đang đi thật
+  prevFix = fix;
+  myPos = { lat: fix.lat, lng: fix.lng, acc: fix.acc, speed: speed === null ? null : Math.round(speed * 10) / 10 };
   pushPosition(false);
+  trackMyPlace();
   updateStatus();
   render();
 }
@@ -750,6 +1310,7 @@ function pushPosition(force) {
     online: document.visibilityState === "visible",
   };
   if (battery) { data.battery = battery.level; data.charging = battery.charging; }
+  data.speed = typeof myPos.speed === "number" && myPos.speed >= 0 ? Math.min(myPos.speed, 400) : null;
   fb.update(meRef(), data).catch(onWriteError);
 }
 
@@ -779,14 +1340,69 @@ function releaseWakeLock() {
 /* ------------------------------------------------------------------ */
 /* Main UI bindings                                                    */
 /* ------------------------------------------------------------------ */
+function setSheetCollapsed(collapsed) {
+  $("#sheet").classList.toggle("collapsed", collapsed);
+  $("#sheetHandle").setAttribute("aria-expanded", String(!collapsed));
+}
+
+// Tay cầm của danh sách: chạm để mở/thu gọn, hoặc vuốt lên/xuống.
+function bindSheetGestures() {
+  const h = $("#sheetHandle");
+  let y0 = null, swiped = false;
+  h.addEventListener("pointerdown", (e) => { y0 = e.clientY; swiped = false; h.setPointerCapture?.(e.pointerId); });
+  h.addEventListener("pointermove", (e) => {
+    if (y0 === null || swiped) return;
+    const dy = e.clientY - y0;
+    if (Math.abs(dy) > 24) { swiped = true; buzz(); setSheetCollapsed(dy > 0); }
+  });
+  const end = () => { y0 = null; };
+  h.addEventListener("pointerup", end);
+  h.addEventListener("pointercancel", end);
+  h.addEventListener("click", () => {
+    if (swiped) { swiped = false; return; } // đã xử lý bằng cử chỉ vuốt
+    buzz();
+    setSheetCollapsed(!$("#sheet").classList.contains("collapsed"));
+  });
+}
+
 function bindMainUi() {
-  $("#sheetHandle").addEventListener("click", () => {
-    const sheet = $("#sheet");
-    const collapsed = sheet.classList.toggle("collapsed");
-    $("#sheetHandle").setAttribute("aria-expanded", String(!collapsed));
+  bindSheetGestures();
+
+  // Địa điểm quen thuộc + thẻ chi tiết
+  $("#openPlaces").addEventListener("click", openPlaces);
+  $("#addPlace").addEventListener("click", () => { $("#placesDialog").close(); startPlacing(); });
+  $("#placeHintGo").addEventListener("click", () => startPlacing());
+  $("#placeHintClose").addEventListener("click", () => {
+    state.placeHintDismissed = true; saveState(); renderPlaceHint();
+    toast("Thêm địa điểm bất cứ lúc nào ở nút 📍 Địa điểm.");
+  });
+  $("#placeCancel").addEventListener("click", stopPlacing);
+  $("#placeSave").addEventListener("click", savePlace);
+  $("#placeDelete").addEventListener("click", deletePlace);
+  $("#placeHere").addEventListener("click", () => {
+    const here = myLocation();
+    if (!here) return toast("Chưa có vị trí của bạn.");
+    centerOnTarget(here, Math.max(map.getZoom(), 17));
+  });
+  $("#placeName").addEventListener("input", () => { if (placing) placing.nameEdited = true; });
+  $("#placeName").addEventListener("keydown", (e) => { if (e.key === "Enter") e.currentTarget.blur(); });
+  map.on("movestart", () => $("#crosshair").classList.add("lift"));
+  map.on("moveend", () => $("#crosshair").classList.remove("lift"));
+  new ResizeObserver(() => { if (placing) updatePreview(); }).observe($("#placePanel"));
+
+  $("#detailBack").addEventListener("click", () => { buzz(); closeDetail(); });
+  $("#detailShare").addEventListener("click", () => selectedId && shareLocationOf(selectedId));
+  $("#detailSavePlace").addEventListener("click", () => {
+    const m = selectedId && allMembers()[selectedId];
+    if (m && typeof m.lat === "number") startPlacing({ at: { lat: m.lat, lng: m.lng } });
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
+    if (placing) stopPlacing(); else closeDetail();
   });
 
   $("#locateMe").addEventListener("click", () => {
+    buzz();
     if (!state.sharing) return toast("Bạn đang tắt chia sẻ vị trí. Bật lại trong Cài đặt.");
     if (!gpsOn()) {
       const here = myLocation();
@@ -799,6 +1415,8 @@ function bindMainUi() {
     focusOn([myPos]);
   });
   $("#fitAll").addEventListener("click", () => {
+    buzz();
+    closeDetail();
     const pts = locatedMembers();
     if (!pts.length) return toast("Chưa có ai chia sẻ vị trí.");
     focusOn(pts);
@@ -878,7 +1496,7 @@ async function saveSettings() {
   saveState();
 
   const patch = profilePayload();
-  if (!state.sharing) Object.assign(patch, { lat: null, lng: null, acc: null });
+  if (!state.sharing) Object.assign(patch, { ...HIDDEN_POS });
   fb.update(meRef(), patch).catch(onWriteError);
 
   if (gpsOn() && !wasGps) { lastPush = { at: 0, lat: null, lng: null }; startWatching(); }

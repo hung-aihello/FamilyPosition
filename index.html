@@ -134,17 +134,96 @@
     </div>
 
     <aside id="sheet" class="sheet" aria-label="Danh sách thành viên">
-      <button id="sheetHandle" class="sheet-handle" type="button" aria-expanded="true" aria-controls="memberList">
-        <span class="grip" aria-hidden="true"></span>
-        <span class="sheet-title">Cả nhà <span id="memberCount" class="count"></span></span>
-      </button>
-      <ul id="memberList" class="member-list"></ul>
-      <div id="emptyState" class="empty" hidden>
-        <p>Chưa có ai khác trong nhóm.</p>
-        <button id="emptyInvite" class="btn btn-primary" type="button">Mời người thân</button>
+      <div class="sheet-head">
+        <button id="sheetHandle" class="sheet-handle" type="button" aria-expanded="true" aria-controls="sheetBody">
+          <span class="grip" aria-hidden="true"></span>
+          <span class="sheet-title">Cả nhà <span id="memberCount" class="count"></span></span>
+        </button>
+        <button id="openPlaces" class="chip-btn" type="button">📍 Địa điểm</button>
+      </div>
+
+      <div id="sheetBody" class="sheet-body">
+        <!-- Danh sách cả nhà -->
+        <div id="sheetHome">
+          <ul id="memberList" class="member-list" aria-busy="true">
+            <li class="member skeleton" aria-hidden="true"><span class="member-main"><span class="avatar"></span><span class="member-info sk-info"><span class="sk-line"></span><span class="sk-line"></span></span></span></li>
+            <li class="member skeleton" aria-hidden="true"><span class="member-main"><span class="avatar"></span><span class="member-info sk-info"><span class="sk-line"></span><span class="sk-line"></span></span></span></li>
+            <li class="member skeleton" aria-hidden="true"><span class="member-main"><span class="avatar"></span><span class="member-info sk-info"><span class="sk-line"></span><span class="sk-line"></span></span></span></li>
+          </ul>
+          <div id="emptyState" class="empty" hidden>
+            <p>Chưa có ai khác trong nhóm.</p>
+            <button id="emptyInvite" class="btn btn-primary" type="button">Mời người thân</button>
+          </div>
+
+          <div id="placeHint" class="hint-card" hidden>
+            <span class="hint-icon" aria-hidden="true">🏠</span>
+            <span class="hint-text">
+              <strong>Đánh dấu Nhà mình</strong>
+              <small>Biết ngay khi người thân về đến nhà</small>
+            </span>
+            <button id="placeHintGo" class="btn btn-primary btn-sm" type="button">Đặt ngay</button>
+            <button id="placeHintClose" class="hint-close" type="button" aria-label="Ẩn gợi ý">×</button>
+          </div>
+
+          <section id="feed" class="feed" aria-labelledby="feedTitle" hidden>
+            <h3 id="feedTitle" class="section-title">Hôm nay</h3>
+            <ul id="feedList" class="feed-list"></ul>
+            <p id="feedEmpty" class="feed-empty" hidden>Hôm nay chưa ai đến hay rời địa điểm nào.</p>
+          </section>
+        </div>
+
+        <!-- Thẻ chi tiết một người -->
+        <div id="memberDetail" class="detail" hidden>
+          <button id="detailBack" class="back-link" type="button">‹ Cả nhà</button>
+          <div class="detail-head">
+            <span id="detailAvatar" class="avatar avatar-lg"></span>
+            <div class="detail-title">
+              <h3 id="detailName"></h3>
+              <p id="detailStatus" class="detail-status"></p>
+            </div>
+          </div>
+          <ul id="detailFacts" class="facts"></ul>
+          <div class="detail-actions">
+            <a id="detailGo" class="btn btn-primary" target="_blank" rel="noopener">🧭 Chỉ đường</a>
+            <button id="detailShare" class="btn btn-secondary" type="button">📤 Gửi vị trí</button>
+            <button id="detailSavePlace" class="btn btn-ghost" type="button">⭐ Lưu chỗ này thành địa điểm</button>
+          </div>
+        </div>
       </div>
     </aside>
+
+    <!-- Chế độ đặt địa điểm: kéo bản đồ để đưa ghim vào đúng chỗ -->
+    <div id="placeEditor" class="place-editor" hidden>
+      <div id="crosshair" class="crosshair" aria-hidden="true">
+        <div id="crosshairEmoji" class="crosshair-pin">🏠</div>
+      </div>
+      <div id="placePanel" class="place-panel" role="region" aria-labelledby="placeEditorTitle">
+        <h2 id="placeEditorTitle" tabindex="-1">Thêm địa điểm</h2>
+        <p class="muted place-hint-text">Kéo bản đồ để đưa ghim vào đúng chỗ.</p>
+        <div id="placeEmojiGrid" class="place-emojis" role="radiogroup" aria-label="Biểu tượng"></div>
+        <label class="sr-only" for="placeName">Tên địa điểm</label>
+        <input id="placeName" class="input" type="text" maxlength="24" placeholder="Tên địa điểm, ví dụ: Nhà" enterkeyhint="done">
+        <div id="placeRadius" class="seg" role="radiogroup" aria-label="Phạm vi"></div>
+        <div class="row-btns">
+          <button id="placeCancel" class="btn btn-ghost" type="button">Huỷ</button>
+          <button id="placeSave" class="btn btn-primary" type="button">Lưu</button>
+        </div>
+        <button id="placeDelete" class="btn btn-danger" type="button" hidden>Xoá địa điểm này</button>
+        <button id="placeHere" class="link-btn place-here" type="button">📍 Về vị trí của tôi</button>
+      </div>
+    </div>
   </section>
+
+  <!-- ============ DIALOG: ĐỊA ĐIỂM ============ -->
+  <dialog id="placesDialog" class="modal" aria-labelledby="placesTitle">
+    <div class="modal-body">
+      <h2 id="placesTitle" tabindex="-1" autofocus>Địa điểm quen thuộc</h2>
+      <p class="muted">Khi người thân ở trong vùng này, cả nhà sẽ thấy “🏠 Ở Nhà” và biết lúc họ đến hay rời đi.</p>
+      <ul id="placeList" class="place-list"></ul>
+      <button id="addPlace" class="btn btn-primary btn-lg" type="button">+ Thêm địa điểm</button>
+      <button class="btn btn-ghost" type="button" data-close>Đóng</button>
+    </div>
+  </dialog>
 
   <!-- ============ DIALOG: MỜI ============ -->
   <dialog id="inviteDialog" class="modal" aria-labelledby="inviteTitle">

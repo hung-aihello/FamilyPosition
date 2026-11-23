@@ -84,6 +84,20 @@ Mở link mời trên máy thứ hai → sau khi nhập tên, app hỏi **“B�
 - Đổi tên/hình ở một máy thì các máy khác tự cập nhật. Rời nhóm ở một máy thì mọi máy của người đó cùng thoát.
 - Lỡ tạo tài khoản rác trên máy mới: trên máy đó **Rời nhóm** → mở lại link mời → chọn đúng tên mình.
 
+## Địa điểm quen thuộc
+Bấm **📍 Địa điểm** (góc phải danh sách) → **Thêm địa điểm** → kéo bản đồ cho ghim vào đúng chỗ → chọn biểu tượng, tên, phạm vi (100 / 200 / 400 m) → **Lưu**. Lần đầu app gợi ý sẵn “🏠 Đánh dấu Nhà mình”. Trong thẻ chi tiết của một người còn có nút **⭐ Lưu chỗ này thành địa điểm**.
+
+- Danh sách hiện **“🏠 Ở Nhà từ 17:40”** thay vì khoảng cách.
+- Mục **Hôm nay** ghi lại ai đã về/đến/rời địa điểm nào, lúc mấy giờ (giữ 3 ngày rồi tự dọn).
+- Địa điểm dùng chung cho cả nhóm: ai cũng thêm/sửa/xoá được (chạm vào nhãn địa điểm trên bản đồ để sửa).
+- Chỉ ghi nhận đến/rời khi **máy của người đó đang mở app** (cùng giới hạn chạy nền như vị trí). Mở app sau khi đã về nhà thì giờ “đã về” là lúc mở app.
+- Vừa tạo địa điểm thì những người đang ở sẵn đó không bị tính là “vừa đến”.
+
+## Thẻ chi tiết
+Chạm vào một người (trong danh sách hoặc trên bản đồ) để xem: đang ở đâu, **địa chỉ gần đúng**, cập nhật lúc nào, cách bạn bao xa, sai số GPS, pin, **🛵 đang di chuyển · 30 km/h**. Có nút **🧭 Chỉ đường** (Google Maps) và **📤 Gửi vị trí** (Zalo/Messenger…).
+
+> Địa chỉ được tra từ OpenStreetMap (Nominatim) **chỉ khi mở thẻ chi tiết**, với toạ độ của người đang xem, có bộ nhớ đệm và giới hạn 1 lần / 15 giây.
+
 ## Đổi mã nhóm
 **⚙️ Cài đặt → 🔄 Đổi mã nhóm**: bạn chuyển sang nhóm mới với mã mới, app tự mở hộp mời để gửi lại cho những người muốn giữ. Ai chỉ có mã cũ sẽ không thấy bạn nữa. Dùng khi mã bị lộ hoặc muốn loại ai đó ra — đây là cách **thu hồi quyền truy cập thật sự** (xem giới hạn bên dưới).
 
@@ -103,6 +117,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.7.0 | 23/11/2026 | Địa điểm quen thuộc (🏠 Ở Nhà, dòng thời gian Hôm nay), thẻ chi tiết từng người (địa chỉ, đang di chuyển, gửi vị trí), ghim trượt mượt + không chồng nhau, vuốt danh sách, khung chờ khi tải |
 | 1.6.0 | 23/11/2026 | Hiện số phiên bản trong Cài đặt, nút tải lại để cập nhật |
 | 1.5.0 | 23/11/2026 | Một người dùng nhiều máy: nhận lại danh tính, công tắc “Lấy vị trí từ máy này” |
 | 1.4.0 | 23/11/2026 | Sửa 6 lỗi từ code review, thêm nút Đổi mã nhóm |
@@ -126,6 +141,10 @@ Dữ liệu trên Firebase:
 ```
 families/{mã-nhóm}/members/{id-thiết-bị} = {
   name, emoji, color, sharing, online,
-  lat, lng, acc, battery, charging, updatedAt, joinedAt
+  lat, lng, acc, speed, battery, charging, updatedAt, joinedAt,
+  place, placeSince            // đang ở địa điểm nào, từ lúc nào
 }
+families/{mã-nhóm}/places/{id} = { name, emoji, lat, lng, radius, by, at }
+families/{mã-nhóm}/events/{id} = { m, type: "arrive" | "leave", place, at }
+families/{mã-nhóm}/banned/{id-thiết-bị} = true   // chỉ admin ghi
 ```
