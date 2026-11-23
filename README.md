@@ -60,7 +60,13 @@ firebase database:remove /families/<mã-nhóm>/members/<id> --project nha-minh-7
 ```
 Máy của người đó sẽ tự thoát về màn hình chào với thông báo “Bạn đã được xoá khỏi nhóm”. Họ có thể vào lại bằng mã mời.
 
-> Máy đang chạy bản app cũ (trước khi có tính năng này) sẽ tạo lại bản ghi một lần khi tải bản mới — xoá lại lần nữa là xong.
+Nếu bản ghi cứ bị tạo lại (máy đó đang chạy bản app cũ, hoặc không biết máy nào), **cấm hẳn ID đó** — Security Rules sẽ từ chối mọi lần ghi của nó:
+```bash
+firebase database:set /families/<mã-nhóm>/banned/<id> --data true --project nha-minh-7ef58
+firebase database:remove /families/<mã-nhóm>/members/<id> --project nha-minh-7ef58
+```
+Chỉ admin (Console/CLI) mới ghi được vào `banned`; người dùng app không tự gỡ được.
+> Trên Git Bash (Windows) thêm `MSYS_NO_PATHCONV=1` trước lệnh để đường dẫn `/families/...` không bị đổi.
 
 ## Chạy thử trên máy
 Định vị chỉ hoạt động trên `https://` hoặc `localhost`:

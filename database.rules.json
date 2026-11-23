@@ -7,7 +7,7 @@
         ".read": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/)",
         "members": {
           "$memberId": {
-            ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $memberId.matches(/^[a-z0-9]{16}$/)",
+            ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $memberId.matches(/^[a-z0-9]{16}$/) && !root.child('families').child($familyId).child('banned').child($memberId).exists()",
             ".validate": "newData.hasChild('name')",
             "name":      { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 24" },
             "emoji":     { ".validate": "newData.isString() && newData.val().length <= 8" },
