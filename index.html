@@ -70,7 +70,7 @@
             <label class="field-label" for="codeInput">Nhập mã mời</label>
             <input id="codeInput" class="input mono code-input" type="text" inputmode="text"
                    autocapitalize="none" autocomplete="off" spellcheck="false"
-                   placeholder="xxxxx-xxxxx" maxlength="32">
+                   placeholder="xxxxx-xxxxx" maxlength="256">
             <p id="codeError" class="error" role="alert" hidden></p>
             <button class="btn btn-primary btn-lg" type="submit">Vào nhóm</button>
           </form>
@@ -178,6 +178,7 @@
       </div>
 
       <button id="saveSettings" class="btn btn-primary btn-lg" type="button">Lưu</button>
+      <button id="rekeyFamily" class="btn btn-secondary" type="button">🔄 Đổi mã nhóm</button>
       <button id="leaveFamily" class="btn btn-danger" type="button">Rời khỏi nhóm gia đình</button>
       <button class="btn btn-ghost" type="button" data-close>Đóng</button>
       <p class="fineprint">Trang được bảo vệ bởi reCAPTCHA. Áp dụng
@@ -192,6 +193,21 @@
       <h2 id="leaveTitle" tabindex="-1" autofocus>Rời khỏi nhóm?</h2>
       <p class="muted">Bạn sẽ không còn thấy vị trí người thân, và họ cũng không thấy bạn nữa. Có thể vào lại bằng mã mời.</p>
       <button id="confirmLeaveYes" class="btn btn-danger btn-lg" type="button">Rời nhóm</button>
+      <button class="btn btn-ghost" type="button" data-close>Huỷ</button>
+    </div>
+  </dialog>
+
+  <!-- ============ DIALOG: XÁC NHẬN ĐỔI MÃ NHÓM ============ -->
+  <dialog id="confirmRekey" class="modal" aria-labelledby="rekeyTitle">
+    <div class="modal-body">
+      <h2 id="rekeyTitle" tabindex="-1" autofocus>Đổi sang mã nhóm mới?</h2>
+      <p class="muted">Dùng khi mã nhóm bị lộ, hoặc muốn loại ai đó ra khỏi nhóm.</p>
+      <ul class="tips rekey-steps">
+        <li>Bạn chuyển sang một nhóm mới với mã mới.</li>
+        <li>Gửi lời mời mới cho những người bạn muốn giữ lại.</li>
+        <li>Ai chỉ có mã cũ sẽ không thấy bạn nữa.</li>
+      </ul>
+      <button id="confirmRekeyYes" class="btn btn-primary btn-lg" type="button">Tạo mã mới</button>
       <button class="btn btn-ghost" type="button" data-close>Huỷ</button>
     </div>
   </dialog>

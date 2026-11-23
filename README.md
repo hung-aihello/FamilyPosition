@@ -75,7 +75,12 @@ npx serve .
 # rồi mở http://localhost:3000
 ```
 
+## Đổi mã nhóm
+**⚙️ Cài đặt → 🔄 Đổi mã nhóm**: bạn chuyển sang nhóm mới với mã mới, app tự mở hộp mời để gửi lại cho những người muốn giữ. Ai chỉ có mã cũ sẽ không thấy bạn nữa. Dùng khi mã bị lộ hoặc muốn loại ai đó ra — đây là cách **thu hồi quyền truy cập thật sự** (xem giới hạn bên dưới).
+
 ## Giới hạn cần biết
+
+- **Không đăng nhập = ai có mã nhóm là người trong nhóm.** Người có mã có thể xem vị trí cả nhóm, và về kỹ thuật có thể xoá bản ghi của người khác. Lệnh cấm theo ID (`banned`) chặn được máy cũ cứ tự tạo lại bản ghi, nhưng người cố tình có thể lách bằng cách xoá dữ liệu trình duyệt. Muốn loại ai đó ra hẳn: **Đổi mã nhóm** rồi mời lại những người còn lại. (Sửa tận gốc cần Firebase Auth — không dùng được vì project này đã tắt sign-up để bảo vệ app khác dùng chung.)
 
 - **Chỉ cập nhật vị trí khi app đang mở trên màn hình.** Đây là giới hạn của mọi webapp trên iOS/Android — trình duyệt không cho lấy vị trí khi chạy nền. App hiển thị “x phút trước” để mọi người biết vị trí đã cũ bao lâu. Bật **Giữ màn hình sáng** trong Cài đặt nếu cần theo dõi liên tục khi đang đi đường.
 - Muốn theo dõi cả khi tắt màn hình thì cần bọc thành app native (ví dụ Capacitor + plugin background geolocation).

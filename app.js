@@ -222,16 +222,39 @@ function showFamilyStep() {
   gotoStep("family");
 }
 
-// Chuyển sang nhóm mới; nếu đang ở nhóm khác thì rời nhóm cũ (tránh để lại "bóng ma" như vụ 2 chữ Hưng).
-function switchFamily(code) {
-  if (state.familyId && state.familyId !== code && state.member) {
-    const old = fb.ref(fb.db, `families/${state.familyId}/members/${state.memberId}`);
-    fb.onDisconnect(old).cancel().catch(() => {});
-    fb.remove(old).catch(() => {});
-  }
-  state.familyId = code;
-  state.member = false;
+// Hàng đợi "rời nhóm": lưu trong localStorage để nếu đang mất mạng (hoặc trang tải lại trước khi
+// server xác nhận) thì lần mở app sau vẫn xoá tiếp — không để lại "bóng ma" trong nhóm cũ.
+function queueLeave(familyId) {
+  if (!familyId) return;
+  const q = new Set(state.leaveQueue || []);
+  q.add(familyId);
+  state.leaveQueue = [...q];
   saveState();
+  try { fb.onDisconnect(fb.ref(fb.db, `families/${familyId}/members/${state.memberId}`)).cancel().catch(() => {}); } catch { /* bỏ qua */ }
+}
+
+function processLeaveQueue() {
+  const done = (fid) => {
+    state.leaveQueue = (state.leaveQueue || []).filter((f) => f !== fid);
+    saveState();
+  };
+  return Promise.all((state.leaveQueue || []).map((fid) =>
+    fb.remove(fb.ref(fb.db, `families/${fid}/members/${state.memberId}`))
+      .then(() => done(fid))
+      .catch((e) => { if (isDenied(e)) done(fid); }) // bị cấm thì cũng không xoá được nữa → bỏ khỏi hàng đợi
+  ));
+}
+
+const isDenied = (err) => /PERMISSION_DENIED|permission.denied/i.test(String(err?.code || err?.message || err));
+
+// Chuyển sang nhóm mới; đang ở nhóm khác thì rời nhóm cũ (tránh để lại "bóng ma" như vụ 2 chữ Hưng).
+function switchFamily(code) {
+  if (state.familyId && state.familyId !== code) queueLeave(state.familyId);
+  state.leaveQueue = (state.leaveQueue || []).filter((f) => f !== code); // vào lại nhóm cũ thì đừng xoá mình
+  state.familyId = code;
+  state.member = false; // false = vừa vào nhóm (khác undefined = cài từ bản cũ)
+  saveState();
+  processLeaveQueue();
 }
 
 function showCodeError(msg) {
@@ -280,8 +303,9 @@ let autoFitCount = 0;      // số người có vị trí ở lần tự zoom g�
 let wakeLock = null;
 let kicked = false;
 
-// Bản ghi của mình bị xoá từ phía quản trị → coi như bị mời ra khỏi nhóm.
-function onKicked() {
+// Bản ghi của mình bị xoá từ phía quản trị (reason "removed") hoặc server từ chối cho vào
+// nhóm vì ID bị cấm (reason "banned") → thoát về màn hình chào.
+function onKicked(reason = "removed") {
   if (kicked) return;
   kicked = true;
   stopWatching();
@@ -290,7 +314,7 @@ function onKicked() {
   delete state.familyId;
   state.member = false;
   saveState();
-  try { sessionStorage.setItem("nhaminh.kicked", "1"); } catch { /* bỏ qua */ }
+  try { sessionStorage.setItem("nhaminh.kicked", reason); } catch { /* bỏ qua */ }
   location.replace(location.pathname);
 }
 
@@ -307,10 +331,14 @@ async function enterMain(requestLocation) {
   // để nếu bị xoá khỏi nhóm thì máy này nhận ra và thoát, thay vì tự tạo lại.
   // (Rules bắt buộc có "name", nên các lần ghi vị trí/online sau đó cũng không tạo lại được.)
   // Không await: Firebase tự xếp hàng khi mất mạng, UI không phải chờ.
-  if (!state.member) {
-    const initial = { ...profilePayload(), joinedAt: fb.serverTimestamp() };
+  if (state.member !== true) {
+    const initial = profilePayload();
+    // Chỉ đặt joinedAt khi thật sự mới vào nhóm (member === false). Bản cài từ phiên bản cũ
+    // (member === undefined) đã có joinedAt từ trước — đừng ghi đè.
+    if (state.member === false) initial.joinedAt = fb.serverTimestamp();
     if (!state.sharing) Object.assign(initial, { lat: null, lng: null, acc: null });
-    fb.update(meRef(), initial).catch(onWriteError);
+    // Server từ chối (ID bị cấm) → không cho ở lại màn hình bản đồ.
+    fb.update(meRef(), initial).catch((e) => (isDenied(e) ? onKicked("banned") : onWriteError(e)));
   }
 
   fb.onValue(fb.ref(fb.db, ".info/serverTimeOffset"), (s) => { serverOffset = s.val() || 0; });
@@ -449,11 +477,12 @@ function renderMarkers() {
         icon: L.divIcon({ html, className: "", iconSize: [56, 66], iconAnchor: [28, 66] }),
         keyboard: true, title: m.name, zIndexOffset: isMe ? 1000 : 0,
       }).addTo(map);
-      marker.on("click", () => focusOn([m]));
+      marker.on("click", () => focusOn([marker.getLatLng()])); // vị trí hiện tại, không phải lúc tạo marker
       entry = { marker, html };
       markers.set(m.id, entry);
     } else {
       entry.marker.setLatLng([m.lat, m.lng]);
+      entry.marker.getElement()?.setAttribute("title", m.name);
       if (entry.html !== html) {
         entry.marker.setIcon(L.divIcon({ html, className: "", iconSize: [56, 66], iconAnchor: [28, 66] }));
         entry.html = html;
@@ -680,7 +709,13 @@ function bindMainUi() {
 
   $("#saveSettings").addEventListener("click", saveSettings);
   $("#leaveFamily").addEventListener("click", () => { $("#settingsDialog").close(); $("#confirmLeave").showModal(); });
-  $("#confirmLeaveYes").addEventListener("click", leaveFamily);
+  $("#confirmLeaveYes").addEventListener("click", (e) => { e.currentTarget.disabled = true; leaveFamily(); });
+  $("#rekeyFamily").addEventListener("click", () => { $("#settingsDialog").close(); $("#confirmRekey").showModal(); });
+  $("#confirmRekeyYes").addEventListener("click", (e) => {
+    e.currentTarget.disabled = true;
+    e.currentTarget.textContent = "Đang tạo mã mới…";
+    rekeyFamily();
+  });
 
   if (!("wakeLock" in navigator)) $("#wakeRow").hidden = true;
   if (state.wake) requestWakeLock();
@@ -740,18 +775,29 @@ async function saveSettings() {
   toast("Đã lưu ✓");
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function leaveFamily() {
-  const ref = meRef();
   kicked = true; // đặt trước để listener không hiểu nhầm là bị xoá khỏi nhóm
+  stopWatching();
+  releaseWakeLock();
+  queueLeave(state.familyId);
   delete state.familyId;
   state.member = false;
   saveState();
+  // Không chờ server vô hạn: mất mạng thì hàng đợi sẽ xoá tiếp ở lần mở app sau.
+  await Promise.race([processLeaveQueue(), sleep(2500)]);
+  location.replace(location.pathname);
+}
+
+// Đổi mã nhóm: chuyển mình sang nhóm mới với mã mới, rồi mời lại những người cần.
+// Ai chỉ có mã cũ sẽ không thấy mình nữa (mã cũ bị lộ / muốn loại ai đó ra).
+async function rekeyFamily() {
+  kicked = true; // rời nhóm cũ có chủ đích, đừng báo "bị xoá"
   stopWatching();
-  releaseWakeLock();
-  try {
-    await fb.onDisconnect(ref).cancel();
-    await fb.remove(ref);
-  } catch (e) { console.error(e); }
+  switchFamily(newFamilyCode());
+  try { sessionStorage.setItem("nhaminh.openInvite", "1"); } catch { /* bỏ qua */ }
+  await Promise.race([processLeaveQueue(), sleep(2500)]);
   location.replace(location.pathname);
 }
 
@@ -776,15 +822,30 @@ async function boot() {
     return;
   }
 
-  let wasKicked = false;
-  try { wasKicked = sessionStorage.getItem("nhaminh.kicked") === "1"; sessionStorage.removeItem("nhaminh.kicked"); } catch { /* bỏ qua */ }
-  if (wasKicked) setTimeout(() => toast("Bạn đã được xoá khỏi nhóm gia đình. Có thể vào lại bằng mã mời.", 6000), 300);
+  processLeaveQueue(); // xoá nốt các lần rời nhóm chưa kịp gửi lên server
+
+  let kickedReason = null, openInviteAfter = false;
+  try {
+    kickedReason = sessionStorage.getItem("nhaminh.kicked");
+    openInviteAfter = sessionStorage.getItem("nhaminh.openInvite") === "1";
+    sessionStorage.removeItem("nhaminh.kicked");
+    sessionStorage.removeItem("nhaminh.openInvite");
+  } catch { /* bỏ qua */ }
+  if (kickedReason) {
+    const msg = kickedReason === "banned"
+      ? "Bạn không thể vào nhóm này nữa. Hãy liên hệ người trong nhà."
+      : "Bạn đã được xoá khỏi nhóm gia đình. Có thể vào lại bằng mã mời.";
+    setTimeout(() => toast(msg, 6000), 300);
+  }
 
   if (invited && invited !== state.familyId) {
     pendingInvite = invited;
     startOnboarding();
   } else if (state.familyId && state.name && state.emoji) {
     enterMain(state.sharing);
+    if (openInviteAfter) {
+      setTimeout(() => { openInvite(); toast("Đã tạo mã nhóm mới ✓ Gửi lời mời cho người nhà nhé."); }, 600);
+    }
   } else {
     startOnboarding();
   }
