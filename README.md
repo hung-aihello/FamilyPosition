@@ -126,6 +126,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.8.1 | 23/11/2026 | Sửa ảnh đại diện trên ghim bản đồ bị phóng to, chỉ thấy một góc (CSS của Leaflet ghi đè kích thước ảnh) |
 | 1.8.0 | 23/11/2026 | Ảnh đại diện: chọn ảnh, căn chỉnh (kéo/chụm/thanh trượt), nén WebP 256 px, lưu riêng + nhớ trong máy; ảnh hiện ở danh sách, ghim, thẻ chi tiết, dòng thời gian, bước nhận lại danh tính |
 | 1.7.1 | 23/11/2026 | Sửa chữ/ghim đè nhau trên bản đồ: dàn ghim theo khung thật (bong bóng + tên), nhãn địa điểm tự né sang chỗ trống |
 | 1.7.0 | 23/11/2026 | Địa điểm quen thuộc (🏠 Ở Nhà, dòng thời gian Hôm nay), thẻ chi tiết từng người (địa chỉ, đang di chuyển, gửi vị trí), ghim trượt mượt + không chồng nhau, vuốt danh sách, khung chờ khi tải |
