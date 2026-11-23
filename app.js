@@ -1,7 +1,7 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.7.1";
+const APP_VERSION = "1.8.0";
 const APP_RELEASED = "23/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -289,6 +289,7 @@ function processLeaveQueue() {
   const done = (slot) => { unqueue(slot); saveState(); };
   return Promise.all((state.leaveQueue || []).map((slot) =>
     fb.remove(fb.ref(fb.db, memberPath(slot)))
+      .then(() => fb.remove(fb.ref(fb.db, `families/${slot.f}/photos/${slot.m}`)).catch(() => {}))
       .then(() => done(slot))
       .catch((e) => { if (isDenied(e)) done(slot); }) // bị cấm thì cũng không xoá được nữa → bỏ khỏi hàng đợi
   ));
@@ -322,6 +323,7 @@ function claimMember(code, mid, rec) {
 
 /* ---- Bước "Bạn đã có trong nhóm chưa?" ---- */
 let claimCode = null;
+let claimPhotos = {};
 function showClaimStep(code, list) {
   claimCode = code;
   const mine = foldName(state.name);
@@ -337,7 +339,7 @@ function showClaimStep(code, list) {
     const meta = m.updatedAt ? `cập nhật ${relTime(Date.now() - m.updatedAt)}` : "chưa có vị trí";
     li.innerHTML = `
       <button class="claim-item${match ? " match" : ""}" type="button" aria-label="${escapeHtml(`Tôi là ${m.name}`)}">
-        <span class="avatar" style="--c:${escapeHtml(m.color || "#ccfbf1")}">${escapeHtml(m.emoji || "🙂")}</span>
+        <span class="avatar" style="--c:${escapeHtml(m.color || "#ccfbf1")}">${avatarInner(m, id, validPhoto(claimPhotos[id]?.data) ? claimPhotos[id].data : null)}</span>
         <span class="member-info">
           <span class="member-name">${escapeHtml(m.name)}</span>
           <span class="member-meta">${escapeHtml(meta)}</span>
@@ -365,7 +367,11 @@ async function joinFamily(code, btn) {
   btn.disabled = true;
   btn.textContent = "Đang kiểm tra…";
   try {
-    const snap = await fb.get(fb.ref(fb.db, `families/${code}/members`));
+    const [snap, photoSnap] = await Promise.all([
+      fb.get(fb.ref(fb.db, `families/${code}/members`)),
+      fb.get(fb.ref(fb.db, `families/${code}/photos`)).catch(() => null),
+    ]);
+    claimPhotos = photoSnap?.val() || {};
     if (!snap.exists()) {
       if (pendingInvite) toast("Không tìm thấy nhóm này. Hãy nhờ người nhà gửi lại lời mời.");
       else showCodeError("Không tìm thấy nhóm với mã này.");
@@ -481,6 +487,7 @@ async function enterMain(opts = {}) {
     const mine = members[state.memberId];
     if (mine) {
       if (!state.member) { state.member = true; saveState(); }
+      prunePhotos();
       syncFromServer(mine);
     } else if (state.member) {
       return onKicked();
@@ -648,8 +655,8 @@ function movingText(m, id) {
 }
 
 const placeLabel = (pl) => `${pl.emoji || "📍"} Ở ${pl.name}${pl.since ? ` từ ${clockTime(pl.since)}` : ""}`;
-const avatarHtml = (m, cls = "") =>
-  `<span class="avatar ${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")}">${escapeHtml(m.emoji || "🙂")}</span>`;
+const avatarHtml = (m, id, cls = "") =>
+  `<span class="avatar ${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")}">${avatarInner(m, id)}</span>`;
 
 /* ---- Ghim trên bản đồ ---- */
 
@@ -665,7 +672,7 @@ function renderMarkers() {
     const stale = !isMe && now() - (m.updatedAt || 0) > IDLE_WINDOW;
     const cls = `pin${isMe ? " me" : ""}${stale ? " stale" : ""}${selectedId === m.id ? " selected" : ""}`;
     const html = `<div class="${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")};--dx:${dx.get(m.id) || 0}px">
-      <div class="pin-bubble">${escapeHtml(m.emoji || "🙂")}</div>
+      <div class="pin-bubble">${avatarInner(m, m.id)}</div>
       <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div></div>`;
     let entry = markers.get(m.id);
     if (!entry) {
@@ -848,7 +855,7 @@ function renderList() {
     li.innerHTML = `
       <button class="member-main" type="button" aria-label="${escapeHtml(isMe ? "Xem chi tiết của tôi" : `Xem chi tiết của ${m.name}`)}">
         <span class="avatar" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
-          ${escapeHtml(m.emoji || "🙂")}<span class="status ${status === "on" ? "on" : status === "idle" ? "idle" : ""}"></span>
+          ${avatarInner(m, id)}<span class="status ${status === "on" ? "on" : status === "idle" ? "idle" : ""}"></span>
         </span>
         <span class="member-info">
           <span class="member-name">${escapeHtml(m.name)}${isMe ? ' <span class="me">(bạn)</span>' : ""}</span>
@@ -897,7 +904,7 @@ function renderFeed() {
     const m = members[e.m], pl = places[e.place];
     const who = e.m === state.memberId ? "Bạn" : m.name;
     const verb = e.type === "leave" ? "đã rời" : pl.emoji === "🏠" ? "đã về" : "đã đến";
-    return `<li class="feed-item">${avatarHtml(m, "avatar-sm")}
+    return `<li class="feed-item">${avatarHtml(m, e.m, "avatar-sm")}
       <span class="feed-text"><strong>${escapeHtml(who)}</strong> ${verb} <strong>${escapeHtml(`${pl.emoji || "📍"} ${pl.name}`)}</strong></span>
       <time class="feed-time" datetime="${new Date(e.at).toISOString()}">${escapeHtml(clockTime(e.at))}</time></li>`;
   }).join("");
@@ -952,7 +959,7 @@ function renderDetail() {
 
   const av = $("#detailAvatar");
   av.style.setProperty("--c", m.color || "#ccfbf1");
-  av.textContent = m.emoji || "🙂";
+  av.innerHTML = avatarInner(m, id);
   $("#detailName").textContent = isMe ? `${m.name} (bạn)` : m.name;
 
   const st = $("#detailStatus");
@@ -1114,14 +1121,14 @@ function openPlaces() {
   const items = Object.entries(places).sort(([, a], [, b]) => (a.at || 0) - (b.at || 0));
   ul.innerHTML = items.length ? "" : `<li class="muted">Chưa có địa điểm nào.</li>`;
   for (const [id, pl] of items) {
-    const here = Object.values(all).filter((m) => m?.name && memberPlace(m)?.id === id);
+    const here = Object.entries(all).filter(([, m]) => m?.name && memberPlace(m)?.id === id);
     const li = document.createElement("li");
     li.innerHTML = `<button class="place-item" type="button" aria-label="${escapeHtml(`Sửa ${pl.name}`)}">
       <span class="hint-icon" aria-hidden="true">${escapeHtml(pl.emoji || "📍")}</span>
       <span class="member-info">
         <span class="member-name">${escapeHtml(pl.name)}</span>
         <span class="member-meta">${here.length ? `${here.length} người đang ở đây` : `Phạm vi ${formatDistance(pl.radius)}`}</span>
-        ${here.length ? `<span class="place-who">${here.map((m) => `<span style="--c:${escapeHtml(m.color || "#ccfbf1")}">${escapeHtml(m.emoji || "🙂")}</span>`).join("")}</span>` : ""}
+        ${here.length ? `<span class="place-who">${here.map(([mid, m]) => `<span style="--c:${escapeHtml(m.color || "#ccfbf1")}">${avatarInner(m, mid)}</span>`).join("")}</span>` : ""}
       </span>
       <span class="chev" aria-hidden="true">›</span></button>`;
     li.querySelector("button").addEventListener("click", () => { $("#placesDialog").close(); startPlacing({ id }); });
@@ -1498,6 +1505,14 @@ function bindMainUi() {
   $("#copyLink").addEventListener("click", copyLink);
 
   $("#saveSettings").addEventListener("click", saveSettings);
+  // Ảnh đại diện
+  const pick = () => $("#photoInput").click();
+  $("#pickPhoto").addEventListener("click", pick);
+  $("#settingsAvatarBtn").addEventListener("click", pick);
+  $("#photoInput").addEventListener("change", (e) => { onPhotoPicked(e.target.files?.[0]); e.target.value = ""; });
+  $("#removePhoto").addEventListener("click", () => { draftPhoto = null; renderSettingsAvatar(); toast("Bấm Lưu để dùng lại hình emoji."); });
+  $("#cropOk").addEventListener("click", confirmCrop);
+  bindCropGestures();
   $("#leaveFamily").addEventListener("click", () => { $("#settingsDialog").close(); $("#confirmLeave").showModal(); });
   $("#confirmLeaveYes").addEventListener("click", (e) => { e.currentTarget.disabled = true; leaveFamily(); });
   $("#rekeyFamily").addEventListener("click", () => { $("#settingsDialog").close(); $("#confirmRekey").showModal(); });
@@ -1531,11 +1546,204 @@ async function copyLink() {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Ảnh đại diện                                                        */
+/* ------------------------------------------------------------------ */
+// Ảnh nằm riêng ở families/{f}/photos/{id} = { data: "data:image/webp;base64,…", v }.
+// Hồ sơ thành viên chỉ giữ số phiên bản `photo: v` → các lần cập nhật vị trí (rất thường xuyên)
+// không kéo theo ảnh. Mỗi máy tải ảnh MỘT lần rồi lưu trong localStorage, chỉ tải lại khi v đổi.
+const PHOTO_SIZE = 256;          // px — đủ nét cho avatar 92 px trên màn hình 3x
+const PHOTO_MAX_CHARS = 40000;   // ~30 KB ảnh; rules cho phép tối đa 60.000 ký tự
+const PHOTO_STORE = "nhaminh.photos";
+const PHOTO_RE = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/;
+const validPhoto = (d) => typeof d === "string" && d.length <= 60000 && PHOTO_RE.test(d);
+
+const photoCache = new Map();    // memberId -> { v, data }
+const photoTried = new Map();    // memberId -> phiên bản đã thử tải (tránh tải lặp)
+try {
+  for (const [id, p] of Object.entries(JSON.parse(localStorage.getItem(PHOTO_STORE)) || {})) {
+    if (p && validPhoto(p.data)) photoCache.set(id, p);
+  }
+} catch { /* bỏ qua */ }
+function persistPhotos() {
+  try { localStorage.setItem(PHOTO_STORE, JSON.stringify(Object.fromEntries(photoCache))); } catch { /* đầy bộ nhớ: bỏ qua */ }
+}
+// Bỏ ảnh của những người không còn trong nhóm.
+function prunePhotos() {
+  let changed = false;
+  for (const id of photoCache.keys()) if (!members[id]) { photoCache.delete(id); changed = true; }
+  if (changed) persistPhotos();
+}
+
+// Ảnh hiện tại của một người (data URL) hoặc null. Chưa có trong máy thì tải ngầm rồi vẽ lại.
+function photoOf(id, m) {
+  if (!m?.photo) return null;
+  const c = photoCache.get(id);
+  if (c?.v !== m.photo && photoTried.get(id) !== m.photo && fb && state.familyId) {
+    photoTried.set(id, m.photo);
+    fb.get(famRef(`photos/${id}`)).then((s) => {
+      const p = s.val();
+      if (p && validPhoto(p.data)) { photoCache.set(id, { v: p.v, data: p.data }); persistPhotos(); render(); }
+    }).catch(() => photoTried.delete(id));
+  }
+  return c?.data || null; // ảnh cũ vẫn hiện trong lúc chờ ảnh mới
+}
+
+// Phần bên trong một avatar: ảnh nếu có, không thì emoji.
+function avatarInner(m, id, photo = photoOf(id, m)) {
+  return photo ? `<img class="avatar-img" src="${escapeHtml(photo)}" alt="">` : escapeHtml(m?.emoji || "🙂");
+}
+
+/* ---- Chọn + căn chỉnh + nén ảnh ---- */
+let draftPhoto; // undefined = không đổi, null = bỏ ảnh, string = ảnh mới (chờ bấm Lưu)
+const crop = { img: null, url: null, box: 0, s0: 1, z: 1, x: 0, y: 0, pointers: new Map(), pinch: null };
+
+function renderSettingsAvatar() {
+  const photo = draftPhoto === undefined ? photoOf(state.memberId, members[state.memberId]) : draftPhoto;
+  const av = $("#settingsAvatar");
+  av.style.setProperty("--c", (draftAvatar || [])[1] || state.color || "#ccfbf1");
+  av.innerHTML = avatarInner({ emoji: (draftAvatar || [])[0] || state.emoji }, state.memberId, photo);
+  $("#removePhoto").hidden = !photo;
+  $("#pickPhoto").textContent = photo ? "📷 Đổi ảnh" : "📷 Chọn ảnh";
+}
+
+async function onPhotoPicked(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) return toast("Hãy chọn một tấm ảnh nhé.");
+  if (file.size > 30e6) return toast("Ảnh lớn quá (trên 30 MB). Chọn ảnh khác nhé.");
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.src = url;
+  try {
+    await img.decode();
+  } catch {
+    URL.revokeObjectURL(url);
+    return toast("Không đọc được ảnh này. Thử ảnh JPG hoặc PNG nhé.", 4000);
+  }
+  if (crop.url) URL.revokeObjectURL(crop.url);
+  Object.assign(crop, { img, url, z: 1 });
+  const el = $("#cropImg");
+  el.src = url;
+  $("#cropZoom").value = "1";
+  $("#cropDialog").showModal();
+  requestAnimationFrame(() => {
+    crop.box = $("#cropBox").clientWidth;
+    crop.s0 = Math.max(crop.box / img.naturalWidth, crop.box / img.naturalHeight); // phủ kín khung
+    const w = img.naturalWidth * crop.s0, h = img.naturalHeight * crop.s0;
+    crop.x = (crop.box - w) / 2;
+    crop.y = (crop.box - h) / 2;
+    paintCrop();
+  });
+}
+
+function clampCrop() {
+  const w = crop.img.naturalWidth * crop.s0 * crop.z, h = crop.img.naturalHeight * crop.s0 * crop.z;
+  crop.x = Math.min(0, Math.max(crop.box - w, crop.x));
+  crop.y = Math.min(0, Math.max(crop.box - h, crop.y));
+}
+function paintCrop() {
+  clampCrop();
+  $("#cropImg").style.transform = `translate(${crop.x}px, ${crop.y}px) scale(${crop.s0 * crop.z})`;
+}
+// Phóng to/thu nhỏ quanh một điểm (giữa khung, hoặc giữa 2 ngón tay).
+function zoomCrop(z, cx = crop.box / 2, cy = crop.box / 2) {
+  z = Math.min(4, Math.max(1, z));
+  const k = z / crop.z;
+  crop.x = cx - (cx - crop.x) * k;
+  crop.y = cy - (cy - crop.y) * k;
+  crop.z = z;
+  $("#cropZoom").value = String(z);
+  paintCrop();
+}
+
+function bindCropGestures() {
+  const box = $("#cropBox");
+  const local = (e) => { const r = box.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  box.addEventListener("pointerdown", (e) => {
+    box.setPointerCapture(e.pointerId);
+    crop.pointers.set(e.pointerId, local(e));
+    if (crop.pointers.size === 2) {
+      const [a, b] = [...crop.pointers.values()];
+      crop.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z: crop.z };
+    }
+  });
+  box.addEventListener("pointermove", (e) => {
+    const prev = crop.pointers.get(e.pointerId);
+    if (!prev) return;
+    const cur = local(e);
+    crop.pointers.set(e.pointerId, cur);
+    if (crop.pointers.size === 2 && crop.pinch) {
+      const [a, b] = [...crop.pointers.values()];
+      zoomCrop(crop.pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / crop.pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    } else if (crop.pointers.size === 1) {
+      crop.x += cur.x - prev.x;
+      crop.y += cur.y - prev.y;
+      paintCrop();
+    }
+  });
+  const up = (e) => { crop.pointers.delete(e.pointerId); if (crop.pointers.size < 2) crop.pinch = null; };
+  box.addEventListener("pointerup", up);
+  box.addEventListener("pointercancel", up);
+  box.addEventListener("wheel", (e) => { e.preventDefault(); const p = local(e); zoomCrop(crop.z * (e.deltaY < 0 ? 1.1 : 1 / 1.1), p.x, p.y); }, { passive: false });
+  $("#cropZoom").addEventListener("input", (e) => zoomCrop(+e.target.value));
+}
+
+// Cắt đúng phần trong khung → ảnh vuông 256 px → WebP (máy không hỗ trợ thì JPEG),
+// giảm chất lượng dần cho tới khi dưới ~30 KB.
+function exportCrop() {
+  const scale = crop.s0 * crop.z;
+  const sx = -crop.x / scale, sy = -crop.y / scale, size = crop.box / scale;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = PHOTO_SIZE;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff"; // ảnh PNG trong suốt → nền trắng thay vì đen khi ra JPEG
+  ctx.fillRect(0, 0, PHOTO_SIZE, PHOTO_SIZE);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(crop.img, sx, sy, size, size, 0, 0, PHOTO_SIZE, PHOTO_SIZE);
+  const webp = canvas.toDataURL("image/webp", 0.5).startsWith("data:image/webp");
+  const type = webp ? "image/webp" : "image/jpeg";
+  let q = 0.85, data = canvas.toDataURL(type, q);
+  while (data.length > PHOTO_MAX_CHARS && q > 0.35) { q -= 0.1; data = canvas.toDataURL(type, q); }
+  return validPhoto(data) ? data : null;
+}
+
+function confirmCrop() {
+  const data = exportCrop();
+  if (!data) return toast("Không nén được ảnh này. Thử ảnh khác nhé.");
+  draftPhoto = data;
+  buzz(15);
+  $("#cropDialog").close();
+  renderSettingsAvatar();
+  toast("Bấm Lưu để cập nhật ảnh ✓");
+}
+
+// Gửi ảnh lên trước, rồi mới ghi số phiên bản vào hồ sơ (Firebase giữ đúng thứ tự ghi của một máy,
+// kể cả khi mất mạng) → máy khác thấy phiên bản mới là đã tải được ảnh mới.
+function applyDraftPhoto(patch) {
+  if (draftPhoto === undefined) return;
+  if (draftPhoto) {
+    const v = Date.now();
+    fb.set(famRef(`photos/${state.memberId}`), { data: draftPhoto, v }).catch(onWriteError);
+    photoCache.set(state.memberId, { v, data: draftPhoto });
+    photoTried.set(state.memberId, v);
+    patch.photo = v;
+  } else {
+    fb.remove(famRef(`photos/${state.memberId}`)).catch(onWriteError);
+    photoCache.delete(state.memberId);
+    patch.photo = null;
+  }
+  persistPhotos();
+  draftPhoto = undefined;
+}
+
 let draftAvatar = null;
 function openSettings() {
   $("#settingsName").value = state.name;
   draftAvatar = [state.emoji, state.color];
-  renderAvatarGrid($("#settingsAvatarGrid"), state.emoji, (e, c) => { draftAvatar = [e, c]; });
+  draftPhoto = undefined;
+  renderAvatarGrid($("#settingsAvatarGrid"), state.emoji, (e, c) => { draftAvatar = [e, c]; renderSettingsAvatar(); });
+  renderSettingsAvatar();
   $("#shareToggle").checked = !!state.sharing;
   $("#gpsToggle").checked = state.deviceGps !== false;
   $("#wakeToggle").checked = !!state.wake;
@@ -1555,6 +1763,7 @@ async function saveSettings() {
 
   const patch = profilePayload();
   if (!state.sharing) Object.assign(patch, { ...HIDDEN_POS });
+  applyDraftPhoto(patch);
   fb.update(meRef(), patch).catch(onWriteError);
 
   if (gpsOn() && !wasGps) { lastPush = { at: 0, lat: null, lng: null }; startWatching(); }

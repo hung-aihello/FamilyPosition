@@ -243,10 +243,22 @@
     <div class="modal-body">
       <h2 id="settingsTitle" tabindex="-1" autofocus>Cài đặt</h2>
 
+      <div class="profile-card">
+        <button id="settingsAvatarBtn" class="profile-photo" type="button" aria-label="Đổi ảnh đại diện">
+          <span id="settingsAvatar" class="avatar avatar-xl"></span>
+          <span class="photo-badge" aria-hidden="true">📷</span>
+        </button>
+        <div class="profile-actions">
+          <button id="pickPhoto" class="btn btn-secondary btn-sm" type="button">📷 Chọn ảnh</button>
+          <button id="removePhoto" class="btn btn-ghost btn-sm" type="button" hidden>Dùng hình emoji</button>
+        </div>
+        <input id="photoInput" type="file" accept="image/*" hidden>
+      </div>
+
       <label class="field-label" for="settingsName">Tên hiển thị</label>
       <input id="settingsName" class="input" type="text" maxlength="24">
 
-      <p class="field-label" id="settingsAvatarLabel">Hình đại diện</p>
+      <p class="field-label" id="settingsAvatarLabel">Hình emoji <small class="field-note">(dùng khi không có ảnh, và làm màu nền)</small></p>
       <div id="settingsAvatarGrid" class="avatar-grid compact" role="radiogroup" aria-labelledby="settingsAvatarLabel"></div>
 
       <div class="switch-row">
@@ -284,6 +296,24 @@
         <span id="appVersion"></span> ·
         <button id="reloadApp" class="link-btn" type="button">Tải lại để cập nhật</button>
       </p>
+    </div>
+  </dialog>
+
+  <!-- ============ DIALOG: CĂN CHỈNH ẢNH ĐẠI DIỆN ============ -->
+  <dialog id="cropDialog" class="modal" aria-labelledby="cropTitle">
+    <div class="modal-body">
+      <h2 id="cropTitle" tabindex="-1" autofocus>Căn chỉnh ảnh</h2>
+      <p class="muted">Kéo để di chuyển, chụm 2 ngón hoặc dùng thanh trượt để phóng to.</p>
+      <div id="cropBox" class="crop-box">
+        <img id="cropImg" alt="" draggable="false">
+      </div>
+      <div class="crop-zoom">
+        <span aria-hidden="true">－</span>
+        <input id="cropZoom" type="range" min="1" max="4" step="0.01" value="1" aria-label="Phóng to ảnh">
+        <span aria-hidden="true">＋</span>
+      </div>
+      <button id="cropOk" class="btn btn-primary btn-lg" type="button">Dùng ảnh này</button>
+      <button class="btn btn-ghost" type="button" data-close>Huỷ</button>
     </div>
   </dialog>
 

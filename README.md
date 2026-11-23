@@ -98,6 +98,15 @@ Chạm vào một người (trong danh sách hoặc trên bản đồ) để xem
 
 > Địa chỉ được tra từ OpenStreetMap (Nominatim) **chỉ khi mở thẻ chi tiết**, với toạ độ của người đang xem, có bộ nhớ đệm và giới hạn 1 lần / 15 giây.
 
+## Ảnh đại diện
+**⚙️ Cài đặt → 📷 Chọn ảnh** → kéo/chụm 2 ngón để căn khuôn mặt vào vòng tròn → **Dùng ảnh này** → **Lưu**. Muốn quay lại hình emoji: **Dùng hình emoji** → **Lưu**.
+
+- Ảnh được cắt vuông và nén ngay trên điện thoại: **256×256 px, WebP** (máy cũ không hỗ trợ thì JPEG), thường **~15–25 KB** dù ảnh gốc vài MB.
+- Lưu dạng base64 ở nhánh riêng `photos/{id}`, **không** nằm trong hồ sơ thành viên. Hồ sơ chỉ giữ số phiên bản `photo`, nên các lần cập nhật vị trí không phải gửi kèm ảnh.
+- Mỗi máy chỉ tải ảnh **một lần** rồi nhớ trong máy; chỉ tải lại khi người đó đổi ảnh. Rời nhóm thì ảnh bị xoá theo.
+- Rules chỉ nhận `data:image/webp|jpeg|png;base64,…` tối đa 60.000 ký tự (chặn SVG/chữ/ảnh quá lớn).
+- Không dùng Firebase Storage vì cần đăng nhập, và rules Storage đang dùng chung với app khác.
+
 ## Đổi mã nhóm
 **⚙️ Cài đặt → 🔄 Đổi mã nhóm**: bạn chuyển sang nhóm mới với mã mới, app tự mở hộp mời để gửi lại cho những người muốn giữ. Ai chỉ có mã cũ sẽ không thấy bạn nữa. Dùng khi mã bị lộ hoặc muốn loại ai đó ra — đây là cách **thu hồi quyền truy cập thật sự** (xem giới hạn bên dưới).
 
@@ -117,6 +126,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.8.0 | 23/11/2026 | Ảnh đại diện: chọn ảnh, căn chỉnh (kéo/chụm/thanh trượt), nén WebP 256 px, lưu riêng + nhớ trong máy; ảnh hiện ở danh sách, ghim, thẻ chi tiết, dòng thời gian, bước nhận lại danh tính |
 | 1.7.1 | 23/11/2026 | Sửa chữ/ghim đè nhau trên bản đồ: dàn ghim theo khung thật (bong bóng + tên), nhãn địa điểm tự né sang chỗ trống |
 | 1.7.0 | 23/11/2026 | Địa điểm quen thuộc (🏠 Ở Nhà, dòng thời gian Hôm nay), thẻ chi tiết từng người (địa chỉ, đang di chuyển, gửi vị trí), ghim trượt mượt + không chồng nhau, vuốt danh sách, khung chờ khi tải |
 | 1.6.0 | 23/11/2026 | Hiện số phiên bản trong Cài đặt, nút tải lại để cập nhật |
@@ -143,8 +153,10 @@ Dữ liệu trên Firebase:
 families/{mã-nhóm}/members/{id-thiết-bị} = {
   name, emoji, color, sharing, online,
   lat, lng, acc, speed, battery, charging, updatedAt, joinedAt,
-  place, placeSince            // đang ở địa điểm nào, từ lúc nào
+  place, placeSince,           // đang ở địa điểm nào, từ lúc nào
+  photo                        // số phiên bản ảnh đại diện (nếu có)
 }
+families/{mã-nhóm}/photos/{id-thiết-bị} = { data: "data:image/webp;base64,…", v }
 families/{mã-nhóm}/places/{id} = { name, emoji, lat, lng, radius, by, at }
 families/{mã-nhóm}/events/{id} = { m, type: "arrive" | "leave", place, at }
 families/{mã-nhóm}/banned/{id-thiết-bị} = true   // chỉ admin ghi

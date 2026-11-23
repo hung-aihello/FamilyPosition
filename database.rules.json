@@ -24,7 +24,17 @@
             "placeSince": { ".validate": "newData.isNumber() && newData.val() <= now" },
             "updatedAt":  { ".validate": "newData.isNumber() && newData.val() <= now" },
             "joinedAt":   { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "photo":      { ".validate": "newData.isNumber()" },
             "$other":     { ".validate": false }
+          }
+        },
+        "photos": {
+          "$memberId": {
+            ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $memberId.matches(/^[a-z0-9]{16}$/) && !root.child('families').child($familyId).child('banned').child($memberId).exists()",
+            ".validate": "newData.hasChildren(['data', 'v'])",
+            "data":   { ".validate": "newData.isString() && newData.val().length <= 60000 && (newData.val().beginsWith('data:image/webp;base64,') || newData.val().beginsWith('data:image/jpeg;base64,') || newData.val().beginsWith('data:image/png;base64,'))" },
+            "v":      { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
           }
         },
         "places": {
