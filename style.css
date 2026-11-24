@@ -873,3 +873,8 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .sc-warn { font-size: 14px; margin: 8px 0; padding: 10px 12px; border-radius: 12px; background: #fef3c7; color: #78350f; }
 @media (prefers-color-scheme: dark) { .sc-warn { background: #422006; color: #fde68a; } }
 .sc-label { display: block; font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
+details.sc-part > summary { list-style: none; cursor: pointer; }
+details.sc-part > summary::-webkit-details-marker { display: none; }
+details.sc-part > summary h3 { margin-bottom: 10px; }
+details.sc-part:not([open]) > summary h3 { color: var(--text-muted); font-size: 15px; margin: 0; }
+details.sc-part:not([open]) > summary h3::after { content: "›"; margin-left: auto; font-size: 20px; }

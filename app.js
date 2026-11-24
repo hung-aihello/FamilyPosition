@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.12.5";
+const APP_VERSION = "1.13.0";
 const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -27,6 +27,7 @@ const PLACE_EXIT_MARGIN = 50;   // phải ra xa thêm 50 m mới tính là "đã
 const PLACE_MAX_ACC = 150;      // chỉ xét vào/ra khi sai số GPS ≤ 150 m
 const PLACE_QUIET = 5 * 60e3;   // địa điểm vừa tạo/sửa: không ghi "đã đến" cho những người đang sẵn ở đó
 const EVENT_KEEP = 3 * 864e5;   // dòng thời gian giữ 3 ngày
+const CHARGE_STALE = 2 * 3600e3; // "Đang sạc" báo quá 2 giờ mà không ai báo lại → coi như đã rút sạc
 const MOVING_SPEED = 1.5;       // m/s (~5 km/h) trở lên coi là đang di chuyển
 const WALK_SPEED = 2.5;         // m/s (~9 km/h) trở xuống coi là đi bộ
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -640,6 +641,7 @@ async function enterMain(opts = {}) {
     render();
     if (firstLoad && myPos) pushPosition(false); // GPS có trước dữ liệu nhóm → giờ mới gửi
     if (firstLoad) trackMyPlace();
+    trackOthersPlaces();
   });
   fb.onValue(famRef("places"), (s) => {
     places = {};
@@ -649,6 +651,7 @@ async function enterMain(opts = {}) {
     placesLoaded = true;
     renderPlaces();
     trackMyPlace();
+    trackOthersPlaces();
     render();
   });
   // Dòng thời gian: chỉ tải 2 ngày gần nhất (hiển thị "Hôm nay").
@@ -918,6 +921,15 @@ function memberPlace(m) {
   return id ? { id, ...places[id], since: null } : null;
 }
 
+// Đang cắm sạc? Phím tắt iPhone gửi chữ ("Đúng"/"Có"/"Yes"/"1"… tuỳ ngôn ngữ máy) thay vì true/false.
+// Chỉ tin khi được báo trong 2 giờ gần đây: rút sạc mà không có gì báo lại thì tự tắt.
+const CHARGING_WORDS = /^(true|1|yes|có|co|đúng|dung|on|bật)$/i;
+function isCharging(m) {
+  const c = m.charging;
+  const on = c === true || (typeof c === "string" && CHARGING_WORDS.test(c.trim()));
+  return on && typeof m.chargingAt === "number" && now() - m.chargingAt <= CHARGE_STALE;
+}
+
 function movingText(m, id) {
   const speed = id === state.memberId && gpsOn() && myPos ? myPos.speed : m.speed;
   const fresh = id === state.memberId || now() - (m.updatedAt || 0) < 3 * 60e3;
@@ -1157,7 +1169,7 @@ function renderList() {
       text(status === "on" ? "Đang mở app" : relTime(now() - (m.updatedAt || 0)));
       if (here && !(pl && herePlace && pl.id === herePlace.id)) text(`cách ${formatDistance(distanceMeters(here, m))}`);
     }
-    if (!isMe && typeof m.battery === "number" && m.battery <= 20 && !m.charging) {
+    if (!isMe && typeof m.battery === "number" && m.battery <= 20 && !isCharging(m)) {
       meta.unshift(`<span class="batt low">🪫 ${m.battery}%</span>`); // sắp hết pin: đưa lên đầu cho dễ thấy
     }
 
@@ -1299,8 +1311,11 @@ function renderDetail() {
     if (m.acc) fact("🎯", escapeHtml(`Sai số khoảng ±${formatDistance(m.acc)}`));
   }
   if (!isMe && typeof m.battery === "number") {
-    const low = m.battery <= 20 && !m.charging;
-    fact(m.charging ? "⚡" : "🔋", `<span class="${low ? "low" : ""}">${escapeHtml(m.charging ? `Đang sạc · ${m.battery}%` : `Pin ${m.battery}%${low ? " — sắp hết" : ""}`)}</span>`);
+    const charging = isCharging(m);
+    const low = m.battery <= 20 && !charging;
+    fact(charging ? "⚡" : "🔋", `<span class="${low ? "low" : ""}">${escapeHtml(charging
+      ? `Đang sạc · ${m.battery}% (báo lúc ${clockTime(m.chargingAt)})`
+      : `Pin ${m.battery}%${low ? " — sắp hết" : ""}`)}</span>`);
   }
   $("#detailFacts").innerHTML = facts.join("");
   $("#detailFacts").hidden = !facts.length;
@@ -1395,11 +1410,34 @@ function trackMyPlace() {
   members[state.memberId] = { ...stored, place: next, placeSince: next ? now() : null };
 }
 
-function logEvent(type, placeId) {
+function logEvent(type, placeId, who = state.memberId, at = null) {
   const pl = places[placeId];
   if (!pl || now() - (pl.at || 0) < PLACE_QUIET) return; // vừa tạo địa điểm: người đang ở đó không tính là "vừa đến"
-  const key = fb.push(famRef("events")).key; // chỉ sinh khoá, chưa ghi gì
-  famWrite(`events/${key}`, { m: state.memberId, type, place: placeId, at: fb.serverTimestamp() }).catch(onWriteError);
+  // Ghi giúp người khác: khoá cố định theo (giờ cập nhật, loại, người) → nhiều máy cùng ghi vẫn chỉ ra một sự kiện.
+  const key = at ? eventKey(who, at, type) : fb.push(famRef("events")).key; // push() chỉ sinh khoá, chưa ghi gì
+  famWrite(`events/${key}`, { m: who, type, place: placeId, at: at ?? fb.serverTimestamp() }).catch(at ? () => {} : onWriteError);
+}
+// 9 + 1 + 10 = 20 ký tự [0-9a-z], đúng mẫu khoá sự kiện trong rules.
+const eventKey = (who, at, type) => `${at.toString(36).padStart(9, "0")}${type[0]}${who.slice(0, 10)}`;
+
+// Vị trí do Phím tắt iPhone gửi (không mở app, không có sai số GPS): máy họ không tự ghi đến/rời được,
+// nên máy nào đang mở app sẽ ghi giúp — cùng cách tính như trackMyPlace. Giờ đến/rời = lúc phím tắt gửi.
+// Mọi máy tính ra cùng kết quả và ghi cùng giá trị/khoá nên ghi trùng không sao.
+const fromShortcut = (m) => m.sharing !== false && !m.online && typeof m.lat === "number"
+  && typeof m.lng === "number" && m.acc == null && typeof m.updatedAt === "number";
+function trackOthersPlaces() {
+  if (!membersLoaded || !placesLoaded || kicked) return;
+  for (const [id, m] of Object.entries(members)) {
+    if (id === state.memberId || !m?.name || !fromShortcut(m)) continue;
+    const was = m.place && places[m.place] ? m.place : null;
+    const next = placeAt(m, was);
+    if (next === was && (m.place || null) === was) continue;
+    const at = m.updatedAt; // giờ server lúc phím tắt gửi: máy nào tính cũng ra cùng khoá sự kiện
+    famWrite(`members/${id}`, { place: next, placeSince: next ? at : null }).catch(() => {});
+    if (was && next !== was) logEvent("leave", was, id, at);
+    if (next && next !== was) logEvent("arrive", next, id, at);
+    members[id] = { ...m, place: next, placeSince: next ? at : null };
+  }
 }
 
 function renderPlaces() {
@@ -1709,7 +1747,7 @@ function pushPosition(force) {
     online: liveOnline(),
   };
   if (native.isNative) refreshBattery(); // kết quả dùng cho lần gửi sau
-  if (battery) { data.battery = battery.level; data.charging = battery.charging; }
+  if (battery) { data.battery = battery.level; data.charging = battery.charging; data.chargingAt = fb.serverTimestamp(); }
   data.speed = typeof myPos.speed === "number" && myPos.speed >= 0 ? Math.min(myPos.speed, 400) : null;
   meWrite(data).catch(onWriteError);
 }
@@ -2031,27 +2069,28 @@ function openInvite() {
 
 /* ---- Phím tắt iPhone: gửi vị trí khi không mở app ----
  * Bản web không chạy nền được trên iPhone. App Phím tắt (có sẵn) thì chạy được theo tự động hoá
- * (mở Zalo, cắm sạc, đến/rời nhà, giờ cố định). Phím tắt gồm 5 tác vụ: Lấy vị trí hiện tại → Lấy mức pin
- * → Văn bản (SHORTCUT_BODY, thay LAT/LNG/PIN bằng biến) → Văn bản (mã kết nối) → Lấy nội dung của URL
+ * (mở Zalo, cắm/rút sạc, đến/rời nhà, giờ cố định). Phím tắt gồm 6 tác vụ: Lấy vị trí hiện tại → Lấy mức pin
+ * → Lấy mức pin (bộ sạc) → Văn bản (SHORTCUT_BODY, thay LAT/LNG/PIN/SAC bằng biến) → Văn bản (mã kết nối) → Lấy nội dung của URL
  * (tự nhận Văn bản ngay trên làm URL), PATCH, Yêu cầu nội dung = Tệp (khung mẫu).
  * KHÔNG dùng kiểu JSON của Phím tắt: iPhone cài tiếng Việt gửi số thập phân thành chuỗi "16,09"
  * → rules từ chối (Permission denied). Chèn biến vào Văn bản thì số dùng dấu chấm (đã thử trên máy thật).
  * speed = 0 để thẻ chi tiết không báo "đang di chuyển" theo tốc độ cũ còn sót từ lần mở app.
- * "online" do onDisconnect tự đặt false; Safari không có Battery API nên "charging" không bị sót.
+ * "online" do onDisconnect tự đặt false. "acc": null xoá sai số cũ — cũng là dấu hiệu để máy khác ghi đến/rời
+ * giúp (trackOthersPlaces). "charging" là chữ ("Đúng"/"Có"…, tuỳ ngôn ngữ) → isCharging(); hết hạn sau 2 giờ.
  * Mã kết nối = URL REST hồ sơ của mình (có ".json"). Hồ sơ phải tồn tại sẵn (rules đòi có "name"),
  * nên rời nhóm / đổi mã nhóm / bị xoá thì phím tắt cũ tự bị từ chối.
  * Địa điểm (Ở Nhà…) được các máy xem tự tính từ toạ độ (memberPlace); đến/rời chỉ ghi khi mở app. */
-const SHORTCUT_BODY = '{"lat":LAT,"lng":LNG,"battery":PIN,"speed":0,"updatedAt":{".sv":"timestamp"}}';
+const SHORTCUT_BODY = '{"lat":LAT,"lng":LNG,"acc":null,"battery":PIN,"charging":"SAC","chargingAt":{".sv":"timestamp"},"speed":0,"updatedAt":{".sv":"timestamp"}}';
 const shortcutCode = () => `${firebaseConfig.databaseURL}/families/${state.familyId}/members/${state.memberId}.json`;
 
 function openShortcut() {
   $("#shortcutCode").value = shortcutCode();
   $("#shortcutBody").value = SHORTCUT_BODY;
   $("#shortcutEasy").hidden = !shortcutUrl;
-  $("#shortcutManual").hidden = !!shortcutUrl;
-  $("#shortcutBodyRow").hidden = !!shortcutUrl; // phím tắt chung đã có sẵn mẫu, chỉ cần mã
-  $("#shortcutCodeLabel").hidden = !!shortcutUrl; // tiêu đề phần 1 đã ghi "Mã của bạn"
-  $("#shortcutPart1Title").textContent = shortcutUrl ? "Mã của bạn" : "Hai thứ cần sao chép";
+  // Có link chung: phần tự tạo thu gọn ở dưới, dành cho người quản lý nhóm (sửa / chia sẻ lại phím tắt).
+  $("#shortcutManual").open = !shortcutUrl;
+  $("#shortcutManualNum").hidden = !!shortcutUrl;
+  $("#shortcutManualTitle").textContent = shortcutUrl ? "🛠 Tự tạo phím tắt (người quản lý nhóm)" : "Tạo phím tắt “Nhà Mình”";
   if (shortcutUrl) $("#shortcutLink").href = shortcutUrl;
   const mine = members[state.memberId];
   $("#shortcutStatus").textContent = !state.sharing

@@ -1,31 +1,24 @@
 # Việc để làm sau
 
-Ghi ngày 24/11/2026, sau bản 1.12.5.
+Cập nhật 24/11/2026, bản 1.13.0.
 
 ## Phím tắt iPhone
 
-- [ ] **Thẻ chi tiết hiện sai “⚡ Đang sạc” và sai số GPS cũ.**
-  Phím tắt gửi mức pin nhưng không gửi `charging` và `acc`. Hai giá trị cũ do app Nhà Mình ghi lần trước còn nằm lại,
-  nên thẻ có thể ghi “Đang sạc · 37%” khi máy không cắm sạc. Việc này cũng tắt luôn cảnh báo pin yếu (≤ 20%).
-  Dòng “Sai số khoảng ±11 m” cũng là số cũ.
-  - Cách sửa: thêm `"acc":null,"charging":null` vào mẫu gửi.
-    Mẫu giờ gửi dạng Văn bản nên viết được `null`, và Firebase xoá trường khi nhận `null`.
-    ```
-    {"lat":LAT,"lng":LNG,"acc":null,"battery":PIN,"charging":null,"speed":0,"updatedAt":{".sv":"timestamp"}}
-    ```
-  - Cần làm:
-    1. Đổi `SHORTCUT_BODY` trong `app.js`.
-    2. Sửa khung mẫu trong phím tắt trên iPhone.
-    3. Thay mã bằng `DÁN MÃ VÀO ĐÂY`, chia sẻ lại để lấy link iCloud mới, rồi dán lại mã của mình.
-    4. Thay `shortcutUrl` trong `config.js` bằng link mới.
-    5. Người đã cài phím tắt cũ thì sửa tay khung mẫu, hoặc cài lại từ link mới.
-  - Trước khi gắn link mới, kiểm tra link không chứa mã nhóm: tải file từ
-    `https://www.icloud.com/shortcuts/api/records/<id>`, rồi tìm chuỗi `families/`.
+- [x] **Thẻ chi tiết hiện “⚡ Đang sạc” từ lúc cắm đến lúc rút**, tự tắt nếu quá 2 giờ không có gì báo lại (`isCharging`, `chargingAt`).
+  Mẫu phím tắt mới có thêm `acc:null`, `charging`, `chargingAt`. Rules đã nhận `charging` dạng chuỗi và có thêm `chargingAt`.
+- [x] **Đã về / đã rời cho người dùng phím tắt**: máy nào đang mở app ghi giúp (`trackOthersPlaces`).
+  Giờ ghi là lúc phím tắt gửi. Khoá sự kiện cố định theo `updatedAt`, nên nhiều máy cùng ghi vẫn chỉ ra một sự kiện.
+- [ ] **Người quản lý nhóm cập nhật phím tắt rồi chia sẻ lại link** (hướng dẫn trong app: phần “🛠 Tự tạo phím tắt”):
+  1. Thêm tác vụ *Lấy mức pin* thứ hai, chọn mục về bộ sạc.
+  2. Sao chép mẫu mới, thay khung mẫu, rồi chèn lại các biến LAT/LNG/PIN/SAC.
+  3. Thay mã bằng `DÁN MÃ VÀO ĐÂY` → chia sẻ → lấy link iCloud mới → dán lại mã của mình.
+  4. Thay `shortcutUrl` trong `config.js`. Kiểm tra link không chứa mã nhóm: tải file từ
+     `https://www.icloud.com/shortcuts/api/records/<id>`, tìm chuỗi `families/`.
+  5. Thêm tự động hoá *Bộ sạc → Được ngắt kết nối*.
+  6. Người đã cài phím tắt cũ thì cài lại từ link mới.
 
-- [ ] **Dòng thời gian đến/rời và chuông chỉ chạy khi mở app.**
-  Vị trí từ phím tắt không tạo sự kiện “đã về / đã rời”.
-  Có thể cho máy đang mở app suy ra sự kiện từ toạ độ của người khác.
-  Cần tránh ghi trùng khi nhiều máy cùng mở app.
+  Phím tắt cũ vẫn gửi vị trí bình thường, nhưng không có ⚡ và không được ghi đến/rời giúp.
+- [ ] Xem chữ iPhone ghi cho trạng thái bộ sạc là gì (“Đúng”/“Có”/“Yes”…). Nếu chữ đó không nằm trong `CHARGING_WORDS` thì thêm vào.
 
 ## App Android
 

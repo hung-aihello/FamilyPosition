@@ -270,17 +270,11 @@
 
       <!-- PHẦN 1 -->
       <section class="sc-part">
-        <h3><span class="sc-num">1</span> <span id="shortcutPart1Title">Hai thứ cần sao chép</span></h3>
-        <p class="sc-note">Chưa bấm vội. Các bước ở phần 2 sẽ bảo lúc nào quay lại đây bấm nút nào.</p>
-        <div id="shortcutBodyRow">
-          <label class="sc-label" for="shortcutBody">🅰 Mẫu gửi vị trí (giống nhau cho mọi người)</label>
-          <input id="shortcutBody" class="input mono code-box" type="text" readonly>
-          <button id="copyShortcutBody" class="btn btn-secondary" type="button">📋 Sao chép mẫu</button>
-        </div>
-        <label class="sc-label" for="shortcutCode" id="shortcutCodeLabel">🅱 Mã của bạn</label>
-        <input id="shortcutCode" class="input mono code-box" type="text" readonly>
+        <h3><span class="sc-num">1</span> Mã của bạn</h3>
+        <input id="shortcutCode" class="input mono code-box" type="text" readonly aria-label="Mã của bạn">
         <button id="copyShortcutCode" class="btn btn-primary" type="button">📋 Sao chép mã</button>
-        <p class="sc-note">Mã là riêng của từng người: mỗi người lấy mã trên máy của chính mình, và đừng gửi mã cho người ngoài.</p>
+        <p class="sc-note">Chưa bấm vội, phần 2 sẽ bảo lúc nào bấm. Mã là riêng của từng người: mỗi người lấy mã trên máy
+          của chính mình, và đừng gửi mã cho người ngoài.</p>
       </section>
 
       <!-- PHẦN 2: CÓ LINK CHUNG -->
@@ -298,9 +292,9 @@
         </ol>
       </section>
 
-      <!-- PHẦN 2: TỰ TẠO -->
-      <section class="sc-part" id="shortcutManual">
-        <h3><span class="sc-num">2</span> Tạo phím tắt “Nhà Mình”</h3>
+      <!-- PHẦN 2: TỰ TẠO (có link chung thì thu gọn, dành cho người quản lý nhóm) -->
+      <details class="sc-part" id="shortcutManual" open>
+        <summary><h3><span class="sc-num" id="shortcutManualNum">2</span> <span id="shortcutManualTitle">Tạo phím tắt “Nhà Mình”</span></h3></summary>
         <p class="sc-note">Khoảng 5–10 phút. Mỗi dòng là một lần chạm. Làm đúng thứ tự từ trên xuống.</p>
 
         <h4>a) Tạo phím tắt mới</h4>
@@ -310,15 +304,20 @@
           <li>Chạm vào tên ở trên cùng → <b>Đổi tên</b> → gõ <code>Nhà Mình</code> → <b>Xong</b>.</li>
         </ol>
 
-        <h4>b) Thêm “Lấy vị trí hiện tại” và “Lấy mức pin”</h4>
+        <h4>b) Thêm “Lấy vị trí hiện tại” và hai lần “Lấy mức pin”</h4>
         <ol class="sc-steps">
           <li>Chạm ô <b>Tìm kiếm</b> ở dưới cùng → gõ <code>vị trí hiện tại</code> → chạm <b>Lấy vị trí hiện tại</b>.</li>
           <li>Chạm lại ô <b>Tìm kiếm</b> → gõ <code>pin</code> → chạm <b>Lấy mức pin</b>.</li>
+          <li>Làm lại bước trên để có tác vụ <b>Lấy mức pin</b> thứ hai. Ở tác vụ thứ hai này, chạm chữ xanh <b>Mức pin</b> →
+            chọn mục về <b>bộ sạc</b> (vd <i>Được kết nối với bộ sạc</i>).
+            <small>Chọn mục “kết nối với bộ sạc” chứ không phải “Đang sạc”: pin đầy mà vẫn cắm thì “Đang sạc” báo là không.</small></li>
         </ol>
 
         <h4>c) Thêm khung “Văn bản” thứ nhất: mẫu gửi vị trí</h4>
+        <input id="shortcutBody" class="input mono code-box" type="text" readonly aria-label="Mẫu gửi vị trí">
         <ol class="sc-steps">
-          <li>Quay lại Nhà Mình, bấm <b>📋 Sao chép mẫu</b> (🅰 ở phần 1), rồi mở lại app Phím tắt.
+          <li>Bấm nút này: <button id="copyShortcutBody" class="btn btn-secondary" type="button">📋 Sao chép mẫu</button>
+            rồi mở lại app Phím tắt.
             <small>Đừng tự gõ mẫu: bàn phím iPhone tự đổi dấu <code>"</code> thành <code>“ ”</code> và làm hỏng mẫu.</small></li>
           <li>Ô <b>Tìm kiếm</b> → gõ <code>văn bản</code> → chạm <b>Văn bản</b> (biểu tượng màu vàng).</li>
           <li>Chạm vào khung trống của nó → chạm thêm lần nữa → <b>Dán</b>.</li>
@@ -327,15 +326,16 @@
             trên thanh phía trên bàn phím chạm <b>Chọn biến</b> → chạm ô xanh <span class="sc-var">Vị trí hiện tại</span> →
             chạm vào ô xanh vừa chèn → trong danh sách <b>Lấy</b> chọn <b>Vĩ độ</b>.</li>
           <li>Làm y như vậy với <code>LNG</code> → <span class="sc-var">Vị trí hiện tại</span> → <b>Kinh độ</b>.</li>
-          <li>Và <code>PIN</code> → <span class="sc-var">Mức pin</span>.</li>
-          <li>Kiểm tra: không còn chữ LAT, LNG, PIN; mọi dấu <code>"</code>, <code>:</code>, <code>,</code>, <code>{ }</code> còn nguyên:
-            <small><code>{"lat":</code><span class="sc-var">Vĩ độ</span><code>,"lng":</code><span class="sc-var">Kinh độ</span><code>,"battery":</code><span class="sc-var">Mức pin</span><code>,"speed":0,"updatedAt":{".sv":"timestamp"}}</code></small></li>
+          <li><code>PIN</code> → ô xanh của tác vụ <b>Lấy mức pin thứ nhất</b>.</li>
+          <li><code>SAC</code> → ô xanh của tác vụ <b>Lấy mức pin thứ hai</b> (cái về bộ sạc). Giữ nguyên hai dấu <code>"</code> quanh nó.</li>
+          <li>Kiểm tra: không còn chữ LAT, LNG, PIN, SAC; mọi dấu <code>"</code>, <code>:</code>, <code>,</code>, <code>{ }</code> còn nguyên:
+            <small><code>{"lat":</code><span class="sc-var">Vĩ độ</span><code>,"lng":</code><span class="sc-var">Kinh độ</span><code>,"acc":null,"battery":</code><span class="sc-var">Mức pin</span><code>,"charging":"</code><span class="sc-var">Bộ sạc</span><code>","chargingAt":…}</code></small></li>
         </ol>
         <p class="sc-note">Không thấy <b>Chọn biến</b>? Vuốt thanh phía trên bàn phím sang trái, hoặc chạm giữ vào chỗ bôi đen.</p>
 
         <h4>d) Thêm khung “Văn bản” thứ hai: mã của bạn</h4>
         <ol class="sc-steps">
-          <li>Quay lại Nhà Mình, bấm <b>📋 Sao chép mã</b> (🅱 ở phần 1), rồi mở lại app Phím tắt.</li>
+          <li>Quay lại Nhà Mình, bấm <b>📋 Sao chép mã</b> ở phần 1, rồi mở lại app Phím tắt.</li>
           <li>Ô <b>Tìm kiếm</b> → gõ <code>văn bản</code> → chạm <b>Văn bản</b>.</li>
           <li>Chạm vào khung trống mới → chạm thêm lần nữa → <b>Dán</b>. Khung hiện mã bắt đầu bằng <code>https://</code>, kết thúc bằng <code>.json</code>.</li>
         </ol>
@@ -350,10 +350,14 @@
           <li>Chạm ô <b>Tệp</b> vừa hiện → <b>Chọn biến</b> → chạm ô xanh <span class="sc-var">Văn bản</span> của khung <b>mẫu</b> (khung thứ nhất, có chữ lat, lng).</li>
           <li>Bấm <b>Xong</b>.</li>
         </ol>
-        <p class="sc-note">Thứ tự từ trên xuống phải là: Lấy vị trí hiện tại → Lấy mức pin → Văn bản (mẫu) → Văn bản (mã) → Lấy nội dung của URL.</p>
+        <p class="sc-note">Thứ tự từ trên xuống phải là: Lấy vị trí hiện tại → Lấy mức pin → Lấy mức pin (bộ sạc) →
+          Văn bản (mẫu) → Văn bản (mã) → Lấy nội dung của URL.</p>
         <p class="sc-warn">⚠️ Đừng dùng kiểu <b>JSON</b> với các trường lat/lng: iPhone cài tiếng Việt gửi số thập phân có dấu phẩy
           (<code>16,09</code>) nên bị báo <i>Permission denied</i>. Khung <b>Văn bản</b> + <b>Tệp</b> như trên thì gửi đúng.</p>
-      </section>
+        <p class="sc-note" id="shortcutShareNote">Người quản lý nhóm: muốn chia sẻ cho cả nhà thì thay mã trong khung thứ hai bằng
+          <code>DÁN MÃ VÀO ĐÂY</code> → nút chia sẻ → <b>Sao chép liên kết iCloud</b> → dán lại mã của mình.
+          Link đưa vào <code>shortcutUrl</code> trong <code>config.js</code>.</p>
+      </details>
 
       <!-- PHẦN 3 -->
       <section class="sc-part">
@@ -382,7 +386,7 @@
         </ol>
         <p class="sc-note">Nên làm thêm các mục dưới đây theo đúng các bước trên, chỉ khác ở bước 3:</p>
         <ul class="triggers">
-          <li>🔌 <b>Bộ sạc</b> → <b>Được kết nối</b></li>
+          <li>🔌 <b>Bộ sạc</b> → tích cả <b>Được kết nối</b> và <b>Được ngắt kết nối</b> (để người nhà thấy “⚡ Đang sạc” lúc cắm và tắt đi lúc rút)</li>
           <li>🏠 <b>Đến</b> → chạm <b>Vị trí</b> → tìm địa chỉ nhà → <b>Xong</b> (làm thêm một cái <b>Rời</b> cũng như vậy)</li>
           <li>⏰ <b>Thời gian trong ngày</b> → chọn giờ (vd 7:00), <b>Hằng ngày</b>. Lặp lại cho 12:00, 17:00, 21:00.</li>
         </ul>

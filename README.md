@@ -103,11 +103,12 @@ Trình duyệt trên iPhone không cho web lấy vị trí khi không mở app. 
 
 Giới hạn:
 - Vị trí cập nhật **theo sự kiện**, không liên tục — người nhà thấy “x phút trước”. Mở Zalo càng thường thì càng mới.
-- Không có tốc độ / sai số GPS; “Ở Nhà” được các máy tự tính từ toạ độ. Dòng thời gian *đã về / đã rời* và chuông chỉ có khi người đó mở Nhà Mình.
+- Không có tốc độ / sai số GPS. *Đã về / đã rời* (dòng thời gian, chuông, “Ở Nhà từ …”) do **máy người khác đang mở app** ghi giúp, giờ = lúc phím tắt gửi. Không ai mở app thì người mở app sau sẽ ghi bù, đúng giờ.
+- **⚡ Đang sạc** hiện khi phím tắt báo đang cắm sạc (tự động hoá *Bộ sạc → Được kết nối / Được ngắt kết nối*), tự tắt nếu quá 2 giờ không ai báo lại.
 - **Mã kết nối gắn với nhóm hiện tại**: Đổi mã nhóm / rời nhóm thì phải dán lại mã mới vào phím tắt.
 - Không dùng được nếu bật Enforce App Check (xem trên).
 
-Kỹ thuật: phím tắt gồm *Lấy vị trí hiện tại* → *Lấy mức pin* → *Văn bản* (mẫu `{"lat":LAT,"lng":LNG,"battery":PIN,"speed":0,"updatedAt":{".sv":"timestamp"}}`, LAT/LNG/PIN thay bằng biến) → *Văn bản* (mã kết nối = `{databaseURL}/families/{mã}/members/{id}.json`) → *Lấy nội dung của URL* `PATCH`, nội dung = **Tệp** (khung mẫu). Không dùng kiểu JSON của Phím tắt: iPhone cài tiếng Việt gửi số thập phân thành chuỗi `"16,09"` → rules từ chối. `speed:0` để không báo “đang di chuyển” theo tốc độ cũ; `online` đã do onDisconnect đặt false. Rules chỉ nhận khi hồ sơ đã tồn tại.
+Kỹ thuật: phím tắt gồm *Lấy vị trí hiện tại* → *Lấy mức pin* → *Lấy mức pin* (chọn mục bộ sạc) → *Văn bản* (mẫu `{"lat":LAT,"lng":LNG,"acc":null,"battery":PIN,"charging":"SAC","chargingAt":{".sv":"timestamp"},"speed":0,"updatedAt":{".sv":"timestamp"}}`, LAT/LNG/PIN/SAC thay bằng biến) → *Văn bản* (mã kết nối = `{databaseURL}/families/{mã}/members/{id}.json`) → *Lấy nội dung của URL* `PATCH`, nội dung = **Tệp** (khung mẫu). Không dùng kiểu JSON của Phím tắt: iPhone cài tiếng Việt gửi số thập phân thành chuỗi `"16,09"` → rules từ chối. `speed:0` để không báo “đang di chuyển” theo tốc độ cũ; `acc:null` xoá sai số cũ và là dấu hiệu “vị trí từ phím tắt” để máy khác ghi đến/rời giúp (`trackOthersPlaces`, khoá sự kiện cố định theo `updatedAt` nên nhiều máy ghi vẫn chỉ ra một); `charging` là chữ tuỳ ngôn ngữ máy (“Đúng”, “Có”…), rules nhận cả boolean lẫn chuỗi ≤ 12 ký tự, `chargingAt` để tự tắt sau 2 giờ; `online` đã do onDisconnect đặt false. Rules chỉ nhận khi hồ sơ đã tồn tại.
 
 ## Địa điểm quen thuộc
 Bấm **📍 Địa điểm** (góc phải danh sách) → **Thêm địa điểm** → kéo bản đồ cho ghim vào đúng chỗ → chọn biểu tượng, tên, phạm vi (100 / 200 / 400 m) → **Lưu**. Lần đầu app gợi ý sẵn “🏠 Đánh dấu Nhà mình”. Trong thẻ chi tiết của một người còn có nút **⭐ Lưu chỗ này thành địa điểm**.
@@ -150,6 +151,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.13.0 | 24/11/2026 | Phím tắt iPhone: **đã về / đã rời** cho người dùng phím tắt (máy đang mở app ghi giúp, giờ = lúc phím tắt gửi, không ghi trùng); **⚡ Đang sạc** trong thẻ chi tiết từ lúc cắm đến lúc rút sạc, tự tắt sau 2 giờ không ai báo lại (app cũng gửi `chargingAt`); mẫu phím tắt mới xoá sai số GPS cũ. Rules: `charging` nhận chuỗi, thêm `chargingAt` |
 | 1.12.5 | 24/11/2026 | Web trên Android: Cài đặt hiện nút **🤖 Cài app Android** thay cho nút Phím tắt iPhone. Hộp thoại Phím tắt: khi đã có link chung thì chỉ hiện mã (ẩn mẫu chỉ dùng khi tự tạo) |
 | 1.12.4 | 24/11/2026 | Gắn link iCloud phím tắt “Nhà Mình” (không chứa mã của ai): người nhà bấm **➕ Thêm phím tắt**, dán mã của mình, tạo tự động hoá |
 | 1.12.3 | 24/11/2026 | Sửa phím tắt iPhone bị *Permission denied* khi gửi vị trí: iPhone cài tiếng Việt gửi số thập phân có dấu phẩy ở kiểu JSON → đổi sang khung Văn bản (mẫu có nút **📋 Sao chép mẫu**) gửi dạng Tệp. Đã chạy được trên iPhone thật |
