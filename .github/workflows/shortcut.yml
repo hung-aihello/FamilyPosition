@@ -1,0 +1,51 @@
+# Ký file phím tắt "Nhà Mình" cho iPhone (app Phím tắt chỉ mở file đã được Apple ký).
+# Lệnh `shortcuts sign` chỉ có trên macOS → chạy trên máy Mac của GitHub, rồi đưa file đã ký vào
+# shortcut/ để GitHub Pages phục vụ: https://hung-aihello.github.io/FamilyPosition/shortcut/Nha-Minh.shortcut
+name: Phím tắt iPhone
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "shortcut/build.mjs"
+      - ".github/workflows/shortcut.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: shortcut
+  cancel-in-progress: true
+
+jobs:
+  sign:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tạo và ký phím tắt
+        run: |
+          node shortcut/build.mjs "$RUNNER_TEMP/nm.plist"
+          plutil -lint "$RUNNER_TEMP/nm.plist"
+          plutil -convert binary1 -o "$RUNNER_TEMP/Nhà Mình.shortcut" "$RUNNER_TEMP/nm.plist"
+          shortcuts sign --mode anyone --input "$RUNNER_TEMP/Nhà Mình.shortcut" --output "$RUNNER_TEMP/signed.shortcut"
+          ls -l "$RUNNER_TEMP/signed.shortcut"
+          head -c 4 "$RUNNER_TEMP/signed.shortcut" | xxd
+          cp "$RUNNER_TEMP/signed.shortcut" shortcut/Nha-Minh.shortcut
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NhaMinh-shortcut
+          path: shortcut/Nha-Minh.shortcut
+      - name: Đưa file đã ký lên trang web
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add shortcut/Nha-Minh.shortcut
+          if git diff --cached --quiet; then echo "Không đổi"; exit 0; fi
+          git commit -m "Ký lại phím tắt iPhone"
+          git pull --rebase origin main
+          git push origin HEAD:main
