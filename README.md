@@ -107,7 +107,7 @@ Giới hạn:
 - **Mã kết nối gắn với nhóm hiện tại**: Đổi mã nhóm / rời nhóm thì phải dán lại mã mới vào phím tắt.
 - Không dùng được nếu bật Enforce App Check (xem trên).
 
-Kỹ thuật: phím tắt gồm *Lấy vị trí hiện tại* → *Lấy mức pin* → *Văn bản* (mã kết nối = `{databaseURL}/families/{mã}/members/{id}.json`) → *Lấy nội dung của URL* `PATCH` JSON `{lat, lng, battery, speed:0, updatedAt:{".sv":"timestamp"}}`. `speed:0` để không báo “đang di chuyển” theo tốc độ cũ; `online` đã do onDisconnect đặt false. Rules chỉ nhận khi hồ sơ đã tồn tại.
+Kỹ thuật: phím tắt gồm *Lấy vị trí hiện tại* → *Lấy mức pin* → *Văn bản* (mẫu `{"lat":LAT,"lng":LNG,"battery":PIN,"speed":0,"updatedAt":{".sv":"timestamp"}}`, LAT/LNG/PIN thay bằng biến) → *Văn bản* (mã kết nối = `{databaseURL}/families/{mã}/members/{id}.json`) → *Lấy nội dung của URL* `PATCH`, nội dung = **Tệp** (khung mẫu). Không dùng kiểu JSON của Phím tắt: iPhone cài tiếng Việt gửi số thập phân thành chuỗi `"16,09"` → rules từ chối. `speed:0` để không báo “đang di chuyển” theo tốc độ cũ; `online` đã do onDisconnect đặt false. Rules chỉ nhận khi hồ sơ đã tồn tại.
 
 ## Địa điểm quen thuộc
 Bấm **📍 Địa điểm** (góc phải danh sách) → **Thêm địa điểm** → kéo bản đồ cho ghim vào đúng chỗ → chọn biểu tượng, tên, phạm vi (100 / 200 / 400 m) → **Lưu**. Lần đầu app gợi ý sẵn “🏠 Đánh dấu Nhà mình”. Trong thẻ chi tiết của một người còn có nút **⭐ Lưu chỗ này thành địa điểm**.
@@ -150,6 +150,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.12.3 | 24/11/2026 | Sửa phím tắt iPhone bị *Permission denied* khi gửi vị trí: iPhone cài tiếng Việt gửi số thập phân có dấu phẩy ở kiểu JSON → đổi sang khung Văn bản (mẫu có nút **📋 Sao chép mẫu**) gửi dạng Tệp. Đã chạy được trên iPhone thật |
 | 1.12.2 | 24/11/2026 | Hướng dẫn Phím tắt: đổi tên nhãn cho khớp iOS mới (“Yêu cầu nội dung”), cảnh báo 2 lỗi gây *Permission denied* (chọn nhầm loại Văn bản, gõ sai tên trường) — đã chạy thử thành công trên iPhone thật |
 | 1.12.1 | 24/11/2026 | Viết lại hướng dẫn Phím tắt iPhone thành từng lần chạm (4 phần: sao chép mã → tạo phím tắt → chạy thử → tự động hoá); phím tắt gọn còn 4 tác vụ, 1 request; mã kết nối có sẵn đuôi `.json` |
 | 1.12.0 | 24/11/2026 | iPhone gửi vị trí khi không mở app bằng app **Phím tắt** có sẵn (miễn phí, không cài app): Cài đặt → “📲 Gửi vị trí khi không mở app” có mã kết nối riêng, nút sao chép, hướng dẫn tạo phím tắt + tự động hoá (mở Zalo, cắm sạc, đến/rời nhà, theo giờ); link phím tắt chung đặt ở `shortcutUrl` trong `config.js` |

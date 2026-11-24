@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.12.2";
+const APP_VERSION = "1.12.3";
 const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -1971,6 +1971,7 @@ function bindMainUi() {
   $("#openShortcut").hidden = native.isNative; // app native đã tự gửi khi chạy nền
   $("#openShortcut").addEventListener("click", () => { $("#settingsDialog").close(); openShortcut(); });
   $("#copyShortcutCode").addEventListener("click", copyShortcutCode);
+  $("#copyShortcutBody").addEventListener("click", copyShortcutBody);
 
   $("#saveSettings").addEventListener("click", saveSettings);
   // Âm thanh: áp dụng ngay khi gạt (cài đặt riêng của máy này, không cần bấm Lưu)
@@ -2027,18 +2028,22 @@ function openInvite() {
 
 /* ---- Phím tắt iPhone: gửi vị trí khi không mở app ----
  * Bản web không chạy nền được trên iPhone. App Phím tắt (có sẵn) thì chạy được theo tự động hoá
- * (mở Zalo, cắm sạc, đến/rời nhà, giờ cố định). Phím tắt gồm 4 tác vụ: Lấy vị trí hiện tại → Lấy mức pin
- * → Văn bản (mã kết nối) → Lấy nội dung của URL (tự nhận Văn bản làm URL), PATCH JSON:
- *   { lat, lng, battery, speed: 0, updatedAt: {".sv": "timestamp"} }
+ * (mở Zalo, cắm sạc, đến/rời nhà, giờ cố định). Phím tắt gồm 5 tác vụ: Lấy vị trí hiện tại → Lấy mức pin
+ * → Văn bản (SHORTCUT_BODY, thay LAT/LNG/PIN bằng biến) → Văn bản (mã kết nối) → Lấy nội dung của URL
+ * (tự nhận Văn bản ngay trên làm URL), PATCH, Yêu cầu nội dung = Tệp (khung mẫu).
+ * KHÔNG dùng kiểu JSON của Phím tắt: iPhone cài tiếng Việt gửi số thập phân thành chuỗi "16,09"
+ * → rules từ chối (Permission denied). Chèn biến vào Văn bản thì số dùng dấu chấm (đã thử trên máy thật).
  * speed = 0 để thẻ chi tiết không báo "đang di chuyển" theo tốc độ cũ còn sót từ lần mở app.
  * "online" do onDisconnect tự đặt false; Safari không có Battery API nên "charging" không bị sót.
  * Mã kết nối = URL REST hồ sơ của mình (có ".json"). Hồ sơ phải tồn tại sẵn (rules đòi có "name"),
  * nên rời nhóm / đổi mã nhóm / bị xoá thì phím tắt cũ tự bị từ chối.
  * Địa điểm (Ở Nhà…) được các máy xem tự tính từ toạ độ (memberPlace); đến/rời chỉ ghi khi mở app. */
+const SHORTCUT_BODY = '{"lat":LAT,"lng":LNG,"battery":PIN,"speed":0,"updatedAt":{".sv":"timestamp"}}';
 const shortcutCode = () => `${firebaseConfig.databaseURL}/families/${state.familyId}/members/${state.memberId}.json`;
 
 function openShortcut() {
   $("#shortcutCode").value = shortcutCode();
+  $("#shortcutBody").value = SHORTCUT_BODY;
   $("#shortcutEasy").hidden = !shortcutUrl;
   $("#shortcutManual").hidden = !!shortcutUrl;
   if (shortcutUrl) $("#shortcutLink").href = shortcutUrl;
@@ -2049,16 +2054,18 @@ function openShortcut() {
   $("#shortcutDialog").showModal();
 }
 
-async function copyShortcutCode() {
+async function copyShortcutText(input, text, done) {
   try {
-    await navigator.clipboard.writeText(shortcutCode());
+    await navigator.clipboard.writeText(text);
     sound.success();
-    toast("Đã sao chép mã ✓ Giờ mở app Phím tắt và làm phần 2.");
+    toast(done);
   } catch {
-    $("#shortcutCode").select();
-    prompt("Sao chép mã này:", shortcutCode());
+    input.select();
+    prompt("Sao chép đoạn này:", text);
   }
 }
+const copyShortcutCode = () => copyShortcutText($("#shortcutCode"), shortcutCode(), "Đã sao chép mã ✓ Giờ mở app Phím tắt và dán.");
+const copyShortcutBody = () => copyShortcutText($("#shortcutBody"), SHORTCUT_BODY, "Đã sao chép mẫu ✓ Giờ mở app Phím tắt và dán.");
 
 async function copyLink() {
   try {

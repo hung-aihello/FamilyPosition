@@ -496,7 +496,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .sc-part .btn { margin-top: 8px; }
 .sc-note { font-size: 14px; color: var(--text-muted); margin: 8px 0; }
 .sc-part code, .sc-fields code {
-  font-size: 13.5px; background: var(--primary-soft); color: var(--text); padding: 1px 6px; border-radius: 6px; word-break: break-all;
+  font-size: 13.5px; background: var(--primary-soft); color: var(--text); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere;
 }
 .sc-var { display: inline-block; background: #2563eb; color: #fff; font-size: 13px; font-weight: 600; padding: 0 7px; border-radius: 6px; }
 .sc-fields { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0; }
@@ -872,3 +872,4 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 @media (prefers-reduced-motion: reduce) { .music-fab svg, .music-fab.waiting { animation: none !important; } }
 .sc-warn { font-size: 14px; margin: 8px 0; padding: 10px 12px; border-radius: 12px; background: #fef3c7; color: #78350f; }
 @media (prefers-color-scheme: dark) { .sc-warn { background: #422006; color: #fde68a; } }
+.sc-label { display: block; font-size: 14px; font-weight: 600; margin: 12px 0 4px; }
