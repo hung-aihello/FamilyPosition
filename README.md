@@ -56,6 +56,7 @@ App Check bắt mọi request tới database phải đến từ chính trang web
 4. Đợi 1–2 ngày, xem **App Check → APIs → Realtime Database**: khi gần như 100% request là *Verified* thì bấm **Enforce**.
 
 > ⚠️ **Đang dùng Phím tắt iPhone thì đừng Enforce**: phím tắt ghi thẳng qua REST, không có token App Check, sẽ bị chặn.
+> Khi đó tỷ lệ *Verified* sẽ luôn thấp (mỗi lần phím tắt chạy là một request không xác minh) — đó là bình thường, không phải lỗi App Check; cứ để App Check ở chế độ theo dõi.
 
 > ⚠️ Chỉ Enforce **Realtime Database**. Đừng Enforce Firestore/Storage nếu app khác dùng chung project mà chưa tích hợp App Check — app đó sẽ bị chặn.
 
