@@ -1,0 +1,23 @@
+{
+  "appId": "io.github.hungaihello.nhaminh",
+  "appName": "Nhà Mình",
+  "webDir": "www",
+  "backgroundColor": "#f6f4ef",
+  "server": {
+    "url": "https://hung-aihello.github.io/FamilyPosition/",
+    "errorPath": "offline.html"
+  },
+  "android": {
+    "useLegacyBridge": true
+  },
+  "ios": {
+    "contentInset": "never",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover"
+    }
+  }
+}

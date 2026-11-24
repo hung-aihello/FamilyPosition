@@ -38,6 +38,11 @@ git push -u origin main
 Trên GitHub: **Settings → Pages → Source: Deploy from a branch → `main` / `(root)`** → Save. Sau 1–2 phút app chạy ở `https://<tên-bạn>.github.io/<tên-repo>/`.
 
 ### 4. Cài lên điện thoại
+**Nên dùng app native** — vẫn gửi vị trí khi tắt màn hình. Xem [`mobile/README.md`](mobile/README.md):
+- **Android:** tải [NhaMinh.apk](https://github.com/hung-aihello/FamilyPosition/releases/download/app/NhaMinh.apk) trên điện thoại rồi cài.
+- **iPhone:** ký file `.ipa` bằng Sideloadly (Apple ID miễn phí, ký lại mỗi 7 ngày) hoặc tài khoản Apple Developer.
+
+Hoặc dùng bản web (chỉ gửi vị trí khi đang mở app):
 - **Android (Chrome):** mở link → menu ⋮ → **Thêm vào màn hình chính**.
 - **iPhone (Safari):** mở link → nút Chia sẻ → **Thêm vào MH chính**.
 
@@ -114,8 +119,7 @@ Chạm vào một người (trong danh sách hoặc trên bản đồ) để xem
 
 - **Không đăng nhập = ai có mã nhóm là người trong nhóm.** Người có mã có thể xem vị trí cả nhóm, và về kỹ thuật có thể xoá bản ghi của người khác. Lệnh cấm theo ID (`banned`) chặn được máy cũ cứ tự tạo lại bản ghi, nhưng người cố tình có thể lách bằng cách xoá dữ liệu trình duyệt. Muốn loại ai đó ra hẳn: **Đổi mã nhóm** rồi mời lại những người còn lại. (Sửa tận gốc cần Firebase Auth — không dùng được vì project này đã tắt sign-up để bảo vệ app khác dùng chung.)
 
-- **Chỉ cập nhật vị trí khi app đang mở trên màn hình.** Đây là giới hạn của mọi webapp trên iOS/Android — trình duyệt không cho lấy vị trí khi chạy nền. App hiển thị “x phút trước” để mọi người biết vị trí đã cũ bao lâu. Bật **Giữ màn hình sáng** trong Cài đặt nếu cần theo dõi liên tục khi đang đi đường.
-- Muốn theo dõi cả khi tắt màn hình thì cần bọc thành app native (ví dụ Capacitor + plugin background geolocation).
+- **Bản web chỉ cập nhật vị trí khi app đang mở trên màn hình** — trình duyệt không cho lấy vị trí khi chạy nền. App hiển thị “x phút trước” để mọi người biết vị trí đã cũ bao lâu. Muốn gửi cả khi tắt màn hình: dùng **app native** trong [`mobile/`](mobile/README.md) (Capacitor + plugin background geolocation). App native vẫn dừng nếu bị vuốt tắt khỏi đa nhiệm.
 - Hạn mức Firebase miễn phí: 100 kết nối đồng thời, 1 GB lưu trữ, 10 GB tải xuống/tháng — dư sức cho vài gia đình.
 - Tile bản đồ dùng máy chủ OpenStreetMap theo [chính sách sử dụng](https://operations.osmfoundation.org/policies/tiles/) — phù hợp cho dùng cá nhân/gia đình.
 
@@ -126,6 +130,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.11.0 | 24/11/2026 | App native Android & iPhone (thư mục `mobile/`, Capacitor): **vẫn chia sẻ vị trí khi tắt màn hình / dùng app khác**. App mở chính trang web nên sửa web là app tự cập nhật. Khi chạy nền, vị trí và sự kiện đến/rời gửi qua HTTP native (Firebase REST) vì WebView ở nền bị bóp mạng; người đang chạy nền vẫn hiện "đang chia sẻ". Cài đặt có thêm công tắc "Chia sẻ cả khi tắt màn hình" và nút mở quyền vị trí; pin đọc từ hệ điều hành; chia sẻ dùng bảng chia sẻ của máy; nút Back Android đóng hộp thoại rồi đưa app xuống nền. GitHub Actions build `.apk` và `.ipa`. Sửa `viewport-fit` (ghi nhầm `cut`) thành `cover` để nội dung không bị tai thỏ che |
 | 1.10.1 | 23/11/2026 | Sửa nút 🎵: trình duyệt không cho tự phát nhạc trước lần chạm đầu, nhưng nút vẫn hiện "đang phát" nên chạm vào lại thành tắt nhạc. Giờ lúc chưa được phát, nút toả sóng mời chạm, và chạm vào thì phát nhạc; chạm bất kỳ chỗ nào trên màn hình cũng bật nhạc |
 | 1.10.0 | 23/11/2026 | Âm thanh: lời chào khi mở app (và khi quay lại sau hơn 1 phút), tiếng "pụp" khi chạm, "vút" khi mở/đóng hộp thoại, chuông "kính coong" khi người thân về Nhà, chuông khi đến/rời địa điểm, lấp lánh khi lưu; nhạc nền hộp nhạc tự sáng tác (không lặp lại), tự tắt khi rời app. Nút 🎵 trên bản đồ để bật/tắt nhạc nhanh; Cài đặt có công tắc riêng cho âm thanh và nhạc nền (riêng từng máy). Tự tổng hợp bằng Web Audio, không cần tải file. Trên iPhone âm thanh theo nút gạt im lặng và không cắt nhạc đang nghe |
 | 1.9.4 | 23/11/2026 | Dây nối ghim ↔ vị trí thật dễ nhận ra hơn: dây dày, màu xanh đậm có viền sáng; chấm vị trí thật to hơn với vòng đậm bao ngoài; dây nằm ở lớp riêng dưới mọi ghim nên không vắt ngang nhãn tên người khác |
@@ -155,6 +160,9 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 | `config.js` | Cấu hình Firebase (bạn tự điền) |
 | `database.rules.json` | Security Rules cho Realtime Database |
 | `sw.js`, `manifest.webmanifest`, `icon*` | PWA: cài như app, chạy khi mạng yếu |
+| `native.js` | Cầu nối plugin native khi trang chạy trong app Android/iOS |
+| `mobile/` | Vỏ app native (Capacitor): project Android + iOS, xem [`mobile/README.md`](mobile/README.md) |
+| `.github/workflows/mobile-app.yml` | Build `.apk` + `.ipa` trên GitHub Actions |
 
 Dữ liệu trên Firebase:
 ```

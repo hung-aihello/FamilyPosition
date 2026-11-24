@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icon thông báo "đang chia sẻ vị trí": chỉ dùng kênh alpha (trắng trên nền trong suốt) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M256 92c-72 0-130 57-130 128 0 94 130 200 130 200s130-106 130-200c0-71-58-128-130-128Z M256 152 192 206h16v58h96v-58h16Z" />
+</vector>

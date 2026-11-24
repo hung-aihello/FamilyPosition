@@ -1,0 +1,131 @@
+# Build app Nhà Mình cho Android (.apk) và iOS (.ipa chưa ký) trên máy của GitHub.
+# Kết quả được đăng ở Release "app": link tải cố định
+#   https://github.com/hung-aihello/FamilyPosition/releases/download/app/NhaMinh.apk
+#   https://github.com/hung-aihello/FamilyPosition/releases/download/app/NhaMinh-unsigned.ipa
+# Chỉ cần build lại khi sửa thư mục mobile/ — sửa web (app.js, style.css…) thì app tự nhận bản mới.
+name: App Android & iOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-app.yml"
+
+permissions:
+  contents: write # để cập nhật Release "app"
+
+concurrency:
+  group: mobile-app
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npx cap sync android
+
+      - name: Lấy keystore từ GitHub Secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::Chưa có secret ANDROID_KEYSTORE_BASE64 (xem mobile/README.md, mục Khoá ký Android)"
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build APK
+        working-directory: mobile/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/NhaMinh.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NhaMinh-android
+          path: NhaMinh.apk
+
+  ios:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npx cap sync ios
+
+      # Không ký: GitHub không có tài khoản Apple của bạn. Ký + cài bằng Sideloadly (Windows)
+      # với Apple ID, hoặc mở bằng Xcode trên Mac — xem mobile/README.md.
+      - name: Build .ipa (chưa ký)
+        run: |
+          xcodebuild \
+            -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            MARKETING_VERSION=1.0.${{ github.run_number }} CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/dd/Build/Products/Release-iphoneos/App.app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/NhaMinh-unsigned.ipa" Payload)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NhaMinh-ios
+          path: NhaMinh-unsigned.ipa
+
+  release:
+    needs: [android, ios]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Cập nhật Release "app"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          notes="Bản build số ${{ github.run_number }} ($(date -u +%Y-%m-%d)).
+          Android: tải NhaMinh.apk trên điện thoại rồi mở để cài.
+          iPhone: NhaMinh-unsigned.ipa cần ký bằng Sideloadly/Xcode (xem mobile/README.md)."
+          if ! gh release view app >/dev/null 2>&1; then
+            gh release create app --title "App Nhà Mình (Android & iOS)" --notes "$notes" --target "${{ github.sha }}"
+          else
+            gh release edit app --notes "$notes"
+          fi
+          gh release upload app NhaMinh.apk NhaMinh-unsigned.ipa --clobber

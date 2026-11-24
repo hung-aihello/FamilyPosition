@@ -1,9 +1,10 @@
 import { firebaseConfig, appCheckSiteKey } from "./config.js";
 import { sound } from "./sound.js";
+import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.10.1";
-const APP_RELEASED = "23/11/2026";
+const APP_VERSION = "1.11.0";
+const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"; // bỏ các ký tự dễ nhầm: i l o 0 1
@@ -49,6 +50,7 @@ function loadState() {
   if (!s.memberId) s.memberId = randomString(16, "abcdefghijklmnopqrstuvwxyz0123456789");
   if (s.sharing === undefined) s.sharing = true;     // chia sẻ vị trí — cấp NGƯỜI (đồng bộ giữa các máy)
   if (s.deviceGps === undefined) s.deviceGps = true; // lấy GPS từ máy này — cấp MÁY
+  if (s.bgGps === undefined) s.bgGps = true;         // app native: chia sẻ cả khi chạy nền — cấp MÁY
   if (s.sfx === undefined) s.sfx = true;             // âm thanh hiệu ứng — cấp MÁY
   if (s.music === undefined) s.music = true;         // nhạc nền — cấp MÁY
   // Hàng đợi rời nhóm lưu cặp {f: mã nhóm, m: id}; bản trước chỉ lưu mã nhóm.
@@ -57,6 +59,15 @@ function loadState() {
 }
 // Máy này có đang cung cấp vị trí không: người đó bật chia sẻ VÀ máy này bật GPS.
 const gpsOn = () => !!state.sharing && state.deviceGps !== false;
+// App native đang gửi vị trí cả khi chạy nền / tắt màn hình.
+const bgTracking = () => native.isNative && gpsOn() && state.bgGps !== false;
+// App có đang hiện trên màn hình không. Trong app native dùng sự kiện của hệ điều hành
+// (WebView Android không phải lúc nào cũng đổi document.visibilityState khi về nền).
+let appActive = true;
+const appVisible = () => (native.isNative ? appActive : document.visibilityState === "visible");
+// Trường "online" = vị trí đang được cập nhật trực tiếp: đang mở app, hoặc app native đang chạy nền
+// (chạy nền vẫn gửi ít nhất mỗi PUSH_MAX_SECONDS nên vẫn hiện "đang chia sẻ").
+const liveOnline = () => appVisible() || bgTracking();
 // So khớp tên không phân biệt hoa/thường và dấu: "Hưng" ~ "hung".
 const foldName = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().trim();
 function saveState() {
@@ -259,6 +270,7 @@ function bindSwipeToClose(d) {
 /* Firebase                                                            */
 /* ------------------------------------------------------------------ */
 let fb; // { db, ref, ... }
+let appCheck = null; // { instance, getToken } khi đã bật App Check — dùng cho các lần ghi qua REST
 async function loadFirebase() {
   const [{ initializeApp }, rtdb] = await Promise.all([
     import(`${FIREBASE_SDK}firebase-app.js`),
@@ -284,14 +296,34 @@ async function initAppCheck(app) {
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
   }
   try {
-    const { initializeAppCheck, ReCaptchaEnterpriseProvider } = await import(`${FIREBASE_SDK}firebase-app-check.js`);
-    initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+    const { initializeAppCheck, ReCaptchaEnterpriseProvider, getToken } = await import(`${FIREBASE_SDK}firebase-app-check.js`);
+    const instance = initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+    appCheck = { instance, getToken };
   } catch (e) {
     console.warn("Không khởi tạo được App Check:", e);
   }
 }
 const famRef = (path = "") => fb.ref(fb.db, `families/${state.familyId}${path ? "/" + path : ""}`);
 const meRef = () => famRef(`members/${state.memberId}`);
+
+// Ghi vào nhánh của nhóm (giống update()). App native đang chạy nền thì ghi qua REST bằng HTTP native:
+// WebView ở nền bị hệ điều hành bóp mạng, kết nối realtime của Firebase có thể đứt/chậm.
+// serverTimestamp() của SDK chính là {".sv": "timestamp"} — REST hiểu y như vậy.
+async function famWrite(path, data) {
+  if (!native.isNative || appVisible()) return fb.update(famRef(path), data);
+  const headers = {};
+  if (appCheck) {
+    try { headers["X-Firebase-AppCheck"] = (await appCheck.getToken(appCheck.instance)).token; } catch { /* chưa Enforce thì vẫn ghi được */ }
+  }
+  const url = `${firebaseConfig.databaseURL}/families/${state.familyId}/${path}.json`;
+  try {
+    await native.httpPatch(url, data, headers);
+  } catch (e) {
+    if (/HTTP 40[13]/.test(e.message)) throw new Error(`PERMISSION_DENIED ${e.message}`);
+    throw e;
+  }
+}
+const meWrite = (data) => famWrite(`members/${state.memberId}`, data);
 
 function profilePayload() {
   return { name: state.name, emoji: state.emoji, color: state.color, sharing: !!state.sharing };
@@ -354,6 +386,12 @@ function startOnboarding() {
   $("#skipLocation").addEventListener("click", () => { state.deviceGps = false; saveState(); enterMain(); });
 
   $("#claimNew").addEventListener("click", () => { switchFamily(claimCode); gotoStep("permission"); });
+
+  if (native.isNative) {
+    $("#permTipUpdate").innerHTML = native.platform === "ios"
+      ? "Nên chọn <strong>“Luôn cho phép”</strong> để người nhà thấy bạn cả khi tắt màn hình."
+      : "Vị trí vẫn được gửi khi tắt màn hình — sẽ có một thông báo nhỏ của Nhà Mình.";
+  }
 
   if (state.name && state.emoji) showFamilyStep(); else gotoStep("profile");
 }
@@ -583,7 +621,7 @@ async function enterMain(opts = {}) {
     connected = !!s.val();
     if (connected && !kicked) {
       fb.onDisconnect(meRef()).update({ online: false }).catch(() => {});
-      if (document.visibilityState === "visible") fb.update(meRef(), { online: true }).catch(() => {});
+      if (liveOnline()) fb.update(meRef(), { online: true }).catch(() => {});
     }
     updateStatus();
   });
@@ -627,7 +665,9 @@ async function enterMain(opts = {}) {
     if (Object.keys(old).length) fb.update(famRef("events"), old).catch(() => {});
   }).catch(() => {});
 
-  if (navigator.getBattery) {
+  if (native.isNative) {
+    refreshBattery();
+  } else if (navigator.getBattery) {
     navigator.getBattery().then((b) => {
       const read = () => { battery = { level: Math.round(b.level * 100), charging: b.charging }; };
       read();
@@ -640,20 +680,47 @@ async function enterMain(opts = {}) {
   updateStatus();
 
   setInterval(() => {
-    if (myPos && gpsOn() && document.visibilityState === "visible") pushPosition(true);
+    if (myPos && gpsOn() && appVisible()) pushPosition(true);
     render();
   }, 30e3);
 
-  document.addEventListener("visibilitychange", () => {
-    if (!fb || !state.familyId) return;
-    const visible = document.visibilityState === "visible";
-    fb.update(meRef(), { online: visible }).catch(() => {});
+  const onVisibility = () => {
+    if (!fb || !state.familyId || kicked) return;
+    const visible = appVisible();
+    meWrite({ online: liveOnline() }).catch(() => {});
     if (visible) {
       if (myPos && gpsOn()) pushPosition(true);
       if (state.wake) requestWakeLock();
       render();
     }
-  });
+  };
+  if (native.isNative) {
+    native.onAppStateChange((active) => {
+      if (active === appActive) return;
+      appActive = active;
+      onVisibility();
+    });
+    native.onBackButton(onBackButton);
+  } else {
+    document.addEventListener("visibilitychange", onVisibility);
+  }
+}
+
+// Nút Back (Android): đóng hộp thoại / thẻ chi tiết trước; hết thì đưa app xuống nền
+// (không đóng hẳn — đóng hẳn thì không còn chia sẻ vị trí khi chạy nền).
+function onBackButton() {
+  const open = $$("dialog[open]");
+  if (open.length) return open[open.length - 1].close();
+  if (placing) return stopPlacing();
+  if (selectedId) return closeDetail();
+  native.minimizeApp();
+}
+
+let batteryAt = 0;
+function refreshBattery() {
+  if (Date.now() - batteryAt < 60e3) return;
+  batteryAt = Date.now();
+  native.batteryInfo().then((b) => { if (b) battery = b; }).catch(() => {});
 }
 
 function initMap() {
@@ -1321,7 +1388,7 @@ function trackMyPlace() {
   const next = placeAt(myPos, was);
   if (next === was && (stored.place || null) === was) return;
 
-  fb.update(meRef(), { place: next, placeSince: next ? fb.serverTimestamp() : null }).catch(onWriteError);
+  meWrite({ place: next, placeSince: next ? fb.serverTimestamp() : null }).catch(onWriteError);
   if (was && next !== was) logEvent("leave", was);
   if (next && next !== was) logEvent("arrive", next);
   // Cập nhật ngay trên máy để lần định vị kế tiếp không ghi trùng trước khi server phản hồi.
@@ -1331,7 +1398,8 @@ function trackMyPlace() {
 function logEvent(type, placeId) {
   const pl = places[placeId];
   if (!pl || now() - (pl.at || 0) < PLACE_QUIET) return; // vừa tạo địa điểm: người đang ở đó không tính là "vừa đến"
-  fb.push(famRef("events"), { m: state.memberId, type, place: placeId, at: fb.serverTimestamp() }).catch(onWriteError);
+  const key = fb.push(famRef("events")).key; // chỉ sinh khoá, chưa ghi gì
+  famWrite(`events/${key}`, { m: state.memberId, type, place: placeId, at: fb.serverTimestamp() }).catch(onWriteError);
 }
 
 function renderPlaces() {
@@ -1562,6 +1630,12 @@ function updateStatus() {
 /* Geolocation                                                         */
 /* ------------------------------------------------------------------ */
 function startWatching() {
+  if (native.isNative) {
+    if (watchId !== null) return;
+    geoError = null;
+    watchId = native.watchPosition({ background: state.bgGps !== false }, onPosition, onGeoError);
+    return;
+  }
   if (!("geolocation" in navigator)) {
     geoError = "Thiết bị không hỗ trợ định vị";
     updateStatus();
@@ -1575,7 +1649,10 @@ function startWatching() {
 }
 
 function stopWatching() {
-  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  if (watchId !== null) {
+    if (typeof watchId === "function") watchId(); // app native: hàm dừng theo dõi
+    else navigator.geolocation.clearWatch(watchId);
+  }
   watchId = null;
   myPos = null;
 }
@@ -1601,7 +1678,9 @@ function onPosition(p) {
 function onGeoError(err) {
   if (err.code === err.PERMISSION_DENIED) {
     geoError = "Chưa được cấp quyền vị trí";
-    toast("Bạn chưa cho phép vị trí. Hãy bật lại trong cài đặt trình duyệt.", 5000);
+    toast(native.isNative
+      ? "Nhà Mình chưa được phép dùng vị trí. Vào ⚙️ Cài đặt → Mở quyền vị trí."
+      : "Bạn chưa cho phép vị trí. Hãy bật lại trong cài đặt trình duyệt.", 5000);
     stopWatching();
   } else if (!myPos) {
     geoError = "Chưa bắt được GPS";
@@ -1627,11 +1706,12 @@ function pushPosition(force) {
   const data = {
     lat: +myPos.lat.toFixed(6), lng: +myPos.lng.toFixed(6), acc: myPos.acc,
     updatedAt: fb.serverTimestamp(),
-    online: document.visibilityState === "visible",
+    online: liveOnline(),
   };
+  if (native.isNative) refreshBattery(); // kết quả dùng cho lần gửi sau
   if (battery) { data.battery = battery.level; data.charging = battery.charging; }
   data.speed = typeof myPos.speed === "number" && myPos.speed >= 0 ? Math.min(myPos.speed, 400) : null;
-  fb.update(meRef(), data).catch(onWriteError);
+  meWrite(data).catch(onWriteError);
 }
 
 function onWriteError(err) {
@@ -1919,7 +1999,15 @@ function bindMainUi() {
     rekeyFamily();
   });
 
-  if (!("wakeLock" in navigator)) $("#wakeRow").hidden = true;
+  // App native có chế độ chạy nền nên không cần giữ màn hình sáng.
+  if (!("wakeLock" in navigator) || native.isNative) $("#wakeRow").hidden = true;
+  if (native.isNative) {
+    $("#nativeRows").hidden = false;
+    $("#bgHint").textContent = native.platform === "ios"
+      ? "Cần quyền vị trí “Luôn cho phép”. Đừng vuốt tắt app khỏi đa nhiệm."
+      : "Có một thông báo nhỏ khi đang chia sẻ. Đừng vuốt tắt app; nếu hay bị ngắt: Cài đặt điện thoại → Pin → Nhà Mình → Không hạn chế.";
+    $("#openAppSettings").addEventListener("click", () => native.openAppSettings());
+  }
   if (state.wake) requestWakeLock();
 }
 
@@ -2144,6 +2232,7 @@ function openSettings() {
   renderSettingsAvatar();
   $("#shareToggle").checked = !!state.sharing;
   $("#gpsToggle").checked = state.deviceGps !== false;
+  $("#bgToggle").checked = state.bgGps !== false;
   $("#wakeToggle").checked = !!state.wake;
   $("#sfxToggle").checked = state.sfx !== false;
   $("#musicToggle").checked = state.music !== false;
@@ -2154,11 +2243,13 @@ async function saveSettings() {
   const name = $("#settingsName").value.trim().slice(0, 24);
   if (!name) return toast("Tên không được để trống.");
   const wasGps = gpsOn();
+  const wasBg = state.bgGps !== false;
   state.name = name;
   [state.emoji, state.color] = draftAvatar;
   state.sharing = $("#shareToggle").checked;   // cấp người: áp dụng cho mọi máy của tôi
   state.deviceGps = $("#gpsToggle").checked;   // cấp máy: chỉ máy này
   state.wake = $("#wakeToggle").checked;
+  if (native.isNative) state.bgGps = $("#bgToggle").checked;
   saveState();
 
   const patch = profilePayload();
@@ -2169,6 +2260,13 @@ async function saveSettings() {
 
   if (gpsOn() && !wasGps) { lastPush = { at: 0, lat: null, lng: null }; startWatching(); }
   if (!gpsOn() && wasGps) stopWatching();
+  // Đổi chế độ chạy nền: khởi động lại theo dõi với tuỳ chọn mới (giữ vị trí đang có trên màn hình).
+  if (gpsOn() && wasGps && wasBg !== (state.bgGps !== false)) {
+    const keep = myPos;
+    stopWatching();
+    myPos = keep;
+    startWatching();
+  }
   if (state.wake) requestWakeLock(); else releaseWakeLock();
 
   $("#settingsDialog").close();
@@ -2264,7 +2362,8 @@ async function boot() {
   $("#reloadApp").addEventListener("click", () => location.reload());
   console.info(`Nhà Mình ${APP_VERSION}`);
 
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  // App native luôn tải trang mới từ mạng, không cần service worker (WebView iOS cũng không hỗ trợ).
+  if ("serviceWorker" in navigator && !native.isNative) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
 boot();

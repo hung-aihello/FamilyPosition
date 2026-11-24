@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Nhà Mình</string>
+    <string name="title_activity_main">Nhà Mình</string>
+    <string name="package_name">io.github.hungaihello.nhaminh</string>
+    <string name="custom_url_scheme">io.github.hungaihello.nhaminh</string>
+    <!-- Thông báo cố định khi chia sẻ vị trí lúc chạy nền (plugin background-geolocation) -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Chia sẻ vị trí</string>
+    <string name="capacitor_background_geolocation_notification_color">#0f766e</string>
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_nhaminh</string>
+</resources>

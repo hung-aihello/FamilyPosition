@@ -470,6 +470,9 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 }
 .switch-row + .switch-row { margin-top: 0; }
 .switch-row small { display: block; color: var(--text-muted); font-size: 14px; }
+/* Mục chỉ có trong app Android/iOS */
+#nativeRows .switch-row { margin-top: 0; }
+#nativeRows .btn { margin-bottom: 16px; }
 .switch {
   appearance: none; flex: none; position: relative;
   width: 58px; height: 34px; border-radius: 999px; background: var(--border);

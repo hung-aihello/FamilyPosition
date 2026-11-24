@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nhà Mình — Chưa có mạng</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center; text-align: center;
+      font: 17px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f6f4ef; color: #1c1917;
+      padding: env(safe-area-inset-top) 24px env(safe-area-inset-bottom);
+    }
+    @media (prefers-color-scheme: dark) { body { background: #1c1917; color: #f5f5f4; } }
+    .badge { font-size: 64px; }
+    h1 { font-size: 22px; margin: 8px 0 4px; }
+    p { margin: 0 0 24px; opacity: .75; }
+    button {
+      font: inherit; font-weight: 600; color: #fff; background: #0f766e;
+      border: 0; border-radius: 16px; padding: 14px 28px; min-width: 200px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="badge" aria-hidden="true">📡</div>
+    <h1>Chưa kết nối được</h1>
+    <p>Nhà Mình cần mạng để xem vị trí người thân.<br>Kiểm tra Wi-Fi / 4G rồi thử lại nhé.</p>
+    <button type="button" onclick="location.replace('https://hung-aihello.github.io/FamilyPosition/')">Thử lại</button>
+  </main>
+</body>
+</html>
