@@ -263,66 +263,127 @@
   <dialog id="shortcutDialog" class="modal" aria-labelledby="shortcutTitle">
     <div class="modal-body">
       <h2 id="shortcutTitle" tabindex="-1" autofocus>Gửi vị trí khi không mở app</h2>
-      <p class="muted">Dùng app <strong>Phím tắt</strong> có sẵn trên iPhone: máy tự gửi vị trí của bạn mỗi khi
-        mở Zalo, cắm sạc, về/rời nhà… kể cả lúc không mở Nhà Mình. Làm một lần, khoảng 5 phút.</p>
-
-      <ol class="steps">
-        <li>
-          <strong>Sao chép mã kết nối của bạn</strong>
-          <input id="shortcutCode" class="input mono code-box" type="text" readonly aria-label="Mã kết nối">
-          <button id="copyShortcutCode" class="btn btn-primary" type="button">📋 Sao chép mã</button>
-          <small>Mã này là chìa khoá vị trí của bạn — đừng gửi cho người ngoài nhà.</small>
-        </li>
-        <li>
-          <strong>Thêm phím tắt “Nhà Mình”</strong>
-          <a id="shortcutLink" class="btn btn-secondary" href="#" target="_blank" rel="noopener">➕ Thêm phím tắt</a>
-          <small id="shortcutNoLink" hidden>Chưa có link chung — mở phần “Tự tạo phím tắt” bên dưới.</small>
-        </li>
-        <li>
-          <strong>Dán mã vào phím tắt</strong>
-          <small>App <em>Phím tắt</em> → giữ ngón tay trên ô <em>Nhà Mình</em> → <em>Sửa</em> → chạm dòng
-            <em>DÁN MÃ VÀO ĐÂY</em> → xoá chữ đó → <em>Dán</em> → <em>Xong</em>.<br>
-            Chạm ô <em>Nhà Mình</em> để chạy thử: cho phép vị trí và cho phép kết nối (<em>Luôn cho phép</em>).</small>
-        </li>
-        <li>
-          <strong>Cho máy tự chạy</strong>
-          <small>App <em>Phím tắt</em> → tab <em>Tự động hoá</em> → <em>+</em> → chọn một mục dưới đây →
-            chọn <em>Chạy ngay</em> (tắt <em>Thông báo khi chạy</em>) → <em>Tiếp</em> → chọn <em>Nhà Mình</em>. Nên tạo cả 4:</small>
-          <ul class="triggers">
-            <li>💬 <em>Ứng dụng</em> → chọn Zalo, Facebook, Messenger… → <em>Được mở</em></li>
-            <li>🔌 <em>Bộ sạc</em> → <em>Được kết nối</em></li>
-            <li>🏠 <em>Đến</em> và <em>Rời</em> → chọn vị trí nhà mình</li>
-            <li>⏰ <em>Thời gian trong ngày</em> → vài mốc, vd 7:00 · 12:00 · 17:00 · 21:00</li>
-          </ul>
-        </li>
-      </ol>
-
+      <p class="muted">iPhone có sẵn app <strong>Phím tắt</strong> (biểu tượng hai ô vuông xanh-hồng). Cài một lần,
+        sau đó mỗi khi bạn mở Zalo, cắm sạc, về hoặc rời nhà… iPhone tự gửi vị trí của bạn cho cả nhà,
+        không cần mở Nhà Mình. Làm lần lượt 4 phần dưới đây, mỗi lần chỉ một việc.</p>
       <p class="shortcut-status" id="shortcutStatus"></p>
 
-      <details class="howto">
-        <summary>Tự tạo phím tắt (khi chưa có link chung)</summary>
-        <p>App <em>Phím tắt</em> → <em>+</em> → đặt tên <strong>Nhà Mình</strong>, rồi thêm lần lượt các tác vụ:</p>
-        <ol>
-          <li><em>Văn bản</em>: gõ <code>DÁN MÃ VÀO ĐÂY</code>.</li>
-          <li><em>Văn bản</em> (thứ hai): <code id="shortcutNullJson">{"acc":null,"speed":null,"charging":null}</code></li>
-          <li><em>Lấy nội dung của URL</em>: URL = biến <em>Văn bản</em> (của tác vụ 1) rồi gõ liền <code>.json</code> ·
-            Phương thức <code>PATCH</code> · Phần thân yêu cầu <em>Tệp</em> = biến <em>Văn bản</em> (của tác vụ 2).</li>
-          <li><em>Lấy vị trí hiện tại</em>.</li>
-          <li><em>Lấy mức pin</em>.</li>
-          <li><em>Lấy nội dung của URL</em>: URL giống tác vụ 3 · Phương thức <code>PATCH</code> ·
-            Phần thân yêu cầu <em>JSON</em>, thêm các trường:
-            <ul>
-              <li><code>lat</code> · Số · biến <em>Vị trí hiện tại</em> → chọn <em>Vĩ độ</em></li>
-              <li><code>lng</code> · Số · biến <em>Vị trí hiện tại</em> → chọn <em>Kinh độ</em></li>
-              <li><code>battery</code> · Số · biến <em>Mức pin</em></li>
-              <li><code>online</code> · Boolean · <em>Sai</em></li>
-              <li><code>updatedAt</code> · Từ điển · bên trong thêm <code>.sv</code> · Văn bản · <code>timestamp</code></li>
-            </ul>
-          </li>
+      <!-- PHẦN 1 -->
+      <section class="sc-part">
+        <h3><span class="sc-num">1</span> Sao chép mã của bạn</h3>
+        <input id="shortcutCode" class="input mono code-box" type="text" readonly aria-label="Mã kết nối">
+        <button id="copyShortcutCode" class="btn btn-primary" type="button">📋 Sao chép mã</button>
+        <p class="sc-note">Mã này là riêng của bạn. Mỗi người trong nhà phải lấy mã trên máy của chính mình,
+          và đừng gửi mã cho người ngoài.</p>
+      </section>
+
+      <!-- PHẦN 2: CÓ LINK CHUNG -->
+      <section class="sc-part" id="shortcutEasy" hidden>
+        <h3><span class="sc-num">2</span> Thêm phím tắt vào máy</h3>
+        <ol class="sc-steps">
+          <li>Bấm nút này: <a id="shortcutLink" class="btn btn-secondary" href="#" target="_blank" rel="noopener">➕ Thêm phím tắt</a></li>
+          <li>App Phím tắt mở ra → bấm <b>Thêm phím tắt</b>.</li>
+          <li>Ở tab <b>Phím tắt</b>, thấy ô <b>Nhà Mình</b> → bấm vào <b>dấu ⋯</b> ở góc ô đó.</li>
+          <li>Trong khung <b>Văn bản</b> có chữ <code>DÁN MÃ VÀO ĐÂY</code>: chạm vào chữ đó, xoá hết chữ.</li>
+          <li>Chạm giữ vào khung trống → chọn <b>Dán</b>. Khung giờ hiện mã bắt đầu bằng <code>https://</code> và kết thúc bằng <code>.json</code>.</li>
+          <li>Bấm <b>Xong</b> ở góc trên.</li>
         </ol>
-        <p>Tạo xong: chạm <em>⋯</em> / biểu tượng chia sẻ → <em>Sao chép liên kết iCloud</em> để gửi cho cả nhà
-          (mỗi người tự dán mã của mình ở bước 3).</p>
-      </details>
+      </section>
+
+      <!-- PHẦN 2: TỰ TẠO -->
+      <section class="sc-part" id="shortcutManual">
+        <h3><span class="sc-num">2</span> Tạo phím tắt “Nhà Mình”</h3>
+        <p class="sc-note">Khoảng 5 phút. Mỗi dòng là một lần chạm. Cứ làm đúng thứ tự từ trên xuống.</p>
+
+        <h4>a) Tạo phím tắt mới</h4>
+        <ol class="sc-steps">
+          <li>Mở app <b>Phím tắt</b> → chọn tab <b>Phím tắt</b> ở dưới cùng.</li>
+          <li>Bấm dấu <b>+</b> ở góc trên bên phải.</li>
+          <li>Chạm vào tên ở trên cùng (đang ghi <i>Phím tắt mới</i>) → <b>Đổi tên</b> → gõ <code>Nhà Mình</code> → <b>Xong</b> trên bàn phím.</li>
+        </ol>
+
+        <h4>b) Thêm tác vụ “Lấy vị trí hiện tại”</h4>
+        <ol class="sc-steps">
+          <li>Chạm ô <b>Tìm kiếm tác vụ</b> ở dưới cùng màn hình.</li>
+          <li>Gõ <code>vị trí hiện tại</code> → chạm vào <b>Lấy vị trí hiện tại</b>.</li>
+        </ol>
+
+        <h4>c) Thêm tác vụ “Lấy mức pin”</h4>
+        <ol class="sc-steps">
+          <li>Chạm lại ô <b>Tìm kiếm tác vụ</b> ở dưới cùng.</li>
+          <li>Gõ <code>pin</code> → chạm vào <b>Lấy mức pin</b>.</li>
+        </ol>
+
+        <h4>d) Thêm tác vụ “Văn bản” và dán mã</h4>
+        <ol class="sc-steps">
+          <li>Chạm lại ô <b>Tìm kiếm tác vụ</b> → gõ <code>văn bản</code> → chạm vào <b>Văn bản</b> (biểu tượng chữ “≡” màu vàng).</li>
+          <li>Một khung trống <b>Văn bản</b> hiện ra. Chạm vào khung đó → chạm thêm lần nữa → chọn <b>Dán</b>.</li>
+          <li>Kiểm tra: khung hiện mã bắt đầu bằng <code>https://</code> và kết thúc bằng <code>.json</code>.
+            Nếu không có chữ <b>Dán</b>, quay lại Nhà Mình bấm <b>📋 Sao chép mã</b> ở phần 1 rồi thử lại.</li>
+        </ol>
+
+        <h4>e) Thêm tác vụ “Lấy nội dung của URL”</h4>
+        <ol class="sc-steps">
+          <li>Chạm lại ô <b>Tìm kiếm tác vụ</b> → gõ <code>URL</code> → chạm vào <b>Lấy nội dung của URL</b>.</li>
+          <li>Tác vụ mới tự ghi <b>Lấy nội dung của <span class="sc-var">Văn bản</span></b>, vậy là đúng.
+            <small>Nếu nó ghi tên khác: chạm vào chữ màu xanh đó → <b>Xoá</b>, chạm lại vào ô → chọn <span class="sc-var">Văn bản</span> trên thanh phía trên bàn phím.</small></li>
+          <li>Bấm vào <b>mũi tên ›</b> (hoặc chữ <b>Hiển thị thêm</b>) ở bên phải tác vụ để mở rộng.</li>
+          <li>Dòng <b>Phương thức</b>: chạm chữ <b>GET</b> → chọn <b>PATCH</b>.</li>
+          <li>Dòng <b>Phần thân yêu cầu</b>: để là <b>JSON</b> (nếu đang khác thì chạm vào để chọn <b>JSON</b>).</li>
+        </ol>
+
+        <h4>f) Thêm 5 trường vào phần JSON</h4>
+        <p class="sc-note">Mỗi trường làm giống nhau: chạm <b>Thêm trường mới</b> → chọn loại → gõ <b>Khoá</b> (tên, chữ thường, không dấu cách) → điền <b>Giá trị</b>.</p>
+        <table class="sc-fields">
+          <thead><tr><th>Loại</th><th>Khoá</th><th>Giá trị</th></tr></thead>
+          <tbody>
+            <tr><td>Số</td><td><code>lat</code></td><td>chạm ô Giá trị → trên thanh phía trên bàn phím chọn <span class="sc-var">Vị trí hiện tại</span> → chạm vào chữ xanh đó → chọn <b>Vĩ độ</b></td></tr>
+            <tr><td>Số</td><td><code>lng</code></td><td>như trên nhưng chọn <b>Kinh độ</b></td></tr>
+            <tr><td>Số</td><td><code>battery</code></td><td>chạm ô Giá trị → chọn <span class="sc-var">Mức pin</span> trên thanh phía trên bàn phím</td></tr>
+            <tr><td>Số</td><td><code>speed</code></td><td>gõ số <code>0</code></td></tr>
+            <tr><td>Từ điển</td><td><code>updatedAt</code></td><td>chạm vào chữ <b>Từ điển</b> ở ô Giá trị → trong màn hình mới bấm <b>Thêm trường mới</b> →
+              <b>Văn bản</b> → Khoá: <code>.sv</code> (có dấu chấm ở đầu) · Giá trị: <code>timestamp</code> → bấm <b>Xong</b></td></tr>
+          </tbody>
+        </table>
+        <p class="sc-note">Không thấy thanh chọn biến phía trên bàn phím? Chạm giữ vào ô Giá trị → <b>Chọn biến</b> → chạm vào tác vụ tương ứng ở trên.</p>
+        <p class="sc-note">Xong thì bấm <b>Xong</b> ở góc trên bên phải.</p>
+      </section>
+
+      <!-- PHẦN 3 -->
+      <section class="sc-part">
+        <h3><span class="sc-num">3</span> Chạy thử một lần</h3>
+        <ol class="sc-steps">
+          <li>Trong app Phím tắt, chạm vào ô <b>Nhà Mình</b> để chạy.</li>
+          <li>Khi hỏi vị trí → chọn <b>Cho phép khi dùng ứng dụng</b> (hoặc <b>Luôn cho phép</b>).</li>
+          <li>Khi hỏi được gửi tới <i>firebasedatabase.app</i> không → chọn <b>Luôn cho phép</b>.</li>
+          <li>Ô <b>Nhà Mình</b> hiện dấu ✓ là thành công. Nếu hiện lỗi, chụp màn hình gửi người cài app giúp.</li>
+          <li>Nhờ một người nhà xem trên máy họ: chấm của bạn phải ghi <i>vừa xong</i>.</li>
+        </ol>
+      </section>
+
+      <!-- PHẦN 4 -->
+      <section class="sc-part">
+        <h3><span class="sc-num">4</span> Cho iPhone tự chạy</h3>
+        <p class="sc-note">Ví dụ: tự gửi vị trí mỗi khi mở Zalo.</p>
+        <ol class="sc-steps">
+          <li>App <b>Phím tắt</b> → tab <b>Tự động hoá</b> ở dưới cùng.</li>
+          <li>Bấm <b>+</b> ở góc trên (lần đầu thì bấm <b>Tự động hoá mới</b>).</li>
+          <li>Kéo xuống, chọn <b>Ứng dụng</b>.</li>
+          <li>Chạm <b>Chọn</b> → tích <b>Zalo</b> (thêm Facebook, Messenger… nếu hay dùng) → <b>Xong</b>.</li>
+          <li>Để tích ở <b>Được mở</b>, bỏ tích <b>Được đóng</b>.</li>
+          <li>Chọn <b>Chạy ngay lập tức</b>, rồi <b>tắt</b> công tắc <b>Thông báo khi chạy</b>.</li>
+          <li>Bấm <b>Tiếp</b> → trong danh sách chạm vào <b>Nhà Mình</b>. Xong.</li>
+        </ol>
+        <p class="sc-note">Nên làm thêm các mục dưới đây theo đúng các bước trên, chỉ khác ở bước 3:</p>
+        <ul class="triggers">
+          <li>🔌 <b>Bộ sạc</b> → <b>Được kết nối</b></li>
+          <li>🏠 <b>Đến</b> → chạm <b>Vị trí</b> → tìm địa chỉ nhà → <b>Xong</b> (làm thêm một cái <b>Rời</b> cũng như vậy)</li>
+          <li>⏰ <b>Thời gian trong ngày</b> → chọn giờ (vd 7:00), <b>Hằng ngày</b>. Lặp lại cho 12:00, 17:00, 21:00.</li>
+        </ul>
+      </section>
+
+      <p class="sc-note">Đổi mã nhóm, rời nhóm hoặc vào lại nhóm thì mã thay đổi: làm lại phần 1, rồi mở phím tắt
+        (dấu ⋯ trên ô Nhà Mình) và dán mã mới vào khung Văn bản.</p>
 
       <button class="btn btn-ghost" type="button" data-close>Đóng</button>
     </div>

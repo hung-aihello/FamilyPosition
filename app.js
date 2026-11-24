@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.12.0";
+const APP_VERSION = "1.12.1";
 const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -2027,21 +2027,21 @@ function openInvite() {
 
 /* ---- Phím tắt iPhone: gửi vị trí khi không mở app ----
  * Bản web không chạy nền được trên iPhone. App Phím tắt (có sẵn) thì chạy được theo tự động hoá
- * (mở Zalo, cắm sạc, đến/rời nhà, giờ cố định) và PATCH thẳng vào hồ sơ qua Firebase REST:
- *   1) {"acc":null,"speed":null,"charging":null} — xoá số liệu cũ (Phím tắt không có sai số/tốc độ;
- *      để lại tốc độ cũ thì thẻ chi tiết sẽ báo "đang di chuyển" sai)
- *   2) { lat, lng, battery, online: false, updatedAt: {".sv": "timestamp"} }
- * Mã kết nối = URL hồ sơ của mình (không có ".json"). Hồ sơ phải tồn tại sẵn (rules đòi có "name"),
+ * (mở Zalo, cắm sạc, đến/rời nhà, giờ cố định). Phím tắt gồm 4 tác vụ: Lấy vị trí hiện tại → Lấy mức pin
+ * → Văn bản (mã kết nối) → Lấy nội dung của URL (tự nhận Văn bản làm URL), PATCH JSON:
+ *   { lat, lng, battery, speed: 0, updatedAt: {".sv": "timestamp"} }
+ * speed = 0 để thẻ chi tiết không báo "đang di chuyển" theo tốc độ cũ còn sót từ lần mở app.
+ * "online" do onDisconnect tự đặt false; Safari không có Battery API nên "charging" không bị sót.
+ * Mã kết nối = URL REST hồ sơ của mình (có ".json"). Hồ sơ phải tồn tại sẵn (rules đòi có "name"),
  * nên rời nhóm / đổi mã nhóm / bị xoá thì phím tắt cũ tự bị từ chối.
  * Địa điểm (Ở Nhà…) được các máy xem tự tính từ toạ độ (memberPlace); đến/rời chỉ ghi khi mở app. */
-const shortcutCode = () => `${firebaseConfig.databaseURL}/families/${state.familyId}/members/${state.memberId}`;
+const shortcutCode = () => `${firebaseConfig.databaseURL}/families/${state.familyId}/members/${state.memberId}.json`;
 
 function openShortcut() {
   $("#shortcutCode").value = shortcutCode();
-  $("#shortcutLink").hidden = !shortcutUrl;
+  $("#shortcutEasy").hidden = !shortcutUrl;
+  $("#shortcutManual").hidden = !!shortcutUrl;
   if (shortcutUrl) $("#shortcutLink").href = shortcutUrl;
-  $("#shortcutNoLink").hidden = !!shortcutUrl;
-  $(".howto").open = !shortcutUrl;
   const mine = members[state.memberId];
   $("#shortcutStatus").textContent = !state.sharing
     ? "⚠️ Bạn đang tắt “Chia sẻ vị trí của tôi” — bật lại trong Cài đặt thì người nhà mới thấy."
@@ -2053,7 +2053,7 @@ async function copyShortcutCode() {
   try {
     await navigator.clipboard.writeText(shortcutCode());
     sound.success();
-    toast("Đã sao chép mã ✓ Giờ dán vào phím tắt nhé.");
+    toast("Đã sao chép mã ✓ Giờ mở app Phím tắt và làm phần 2.");
   } catch {
     $("#shortcutCode").select();
     prompt("Sao chép mã này:", shortcutCode());

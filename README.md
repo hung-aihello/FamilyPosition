@@ -95,9 +95,11 @@ Mở link mời trên máy thứ hai → sau khi nhập tên, app hỏi **“B�
 ## Phím tắt iPhone
 Trình duyệt trên iPhone không cho web lấy vị trí khi không mở app. App **Phím tắt** (có sẵn) thì được: tự động hoá chạy phím tắt “Nhà Mình” khi **mở Zalo/Facebook**, **cắm sạc**, **đến/rời nhà**, hoặc **theo giờ** — mỗi lần chạy gửi vị trí + mức pin lên nhóm. Không cài app, không hết hạn, miễn phí.
 
-**Người tạo nhóm (một lần, ~10 phút):** trên iPhone mở Nhà Mình → ⚙️ Cài đặt → 📲 Gửi vị trí khi không mở app → mở **Tự tạo phím tắt** → làm theo 6 tác vụ → chia sẻ phím tắt → **Sao chép liên kết iCloud** → dán vào `shortcutUrl` trong [`config.js`](config.js) → push. Từ đó cả nhà chỉ cần bấm **➕ Thêm phím tắt**.
+**Người tạo nhóm (một lần, ~10 phút):** trên iPhone mở Nhà Mình → ⚙️ Cài đặt → 📲 Gửi vị trí khi không mở app → làm theo phần 1–3 trên màn hình (tạo phím tắt 4 tác vụ, có hướng dẫn từng lần chạm) → chia sẻ phím tắt → **Sao chép liên kết iCloud** → dán vào `shortcutUrl` trong [`config.js`](config.js) → push. Từ đó cả nhà chỉ cần bấm **➕ Thêm phím tắt**.
 
-**Mỗi người (~5 phút):** Cài đặt → 📲 Gửi vị trí khi không mở app → **Sao chép mã** → **Thêm phím tắt** → dán mã vào dòng *DÁN MÃ VÀO ĐÂY* → chạy thử 1 lần (cho phép vị trí + kết nối) → tạo 4 tự động hoá theo hướng dẫn trên màn hình, chọn **Chạy ngay**.
+**Mỗi người (~5 phút):** Cài đặt → 📲 Gửi vị trí khi không mở app → **Sao chép mã** → **Thêm phím tắt** → dán mã vào khung *Văn bản* (thay chữ DÁN MÃ VÀO ĐÂY) → chạy thử 1 lần (cho phép vị trí + kết nối) → tạo các tự động hoá theo hướng dẫn trên màn hình, chọn **Chạy ngay lập tức**.
+
+> Apple chỉ cho mở file phím tắt đã được ký bằng tài khoản iCloud (lệnh `shortcuts sign` báo *must be signed into iCloud* trên máy Mac của GitHub), nên không tạo sẵn file được — phải tạo tay một lần rồi chia sẻ link iCloud.
 
 Giới hạn:
 - Vị trí cập nhật **theo sự kiện**, không liên tục — người nhà thấy “x phút trước”. Mở Zalo càng thường thì càng mới.
@@ -105,7 +107,7 @@ Giới hạn:
 - **Mã kết nối gắn với nhóm hiện tại**: Đổi mã nhóm / rời nhóm thì phải dán lại mã mới vào phím tắt.
 - Không dùng được nếu bật Enforce App Check (xem trên).
 
-Kỹ thuật: mỗi lần chạy, phím tắt gửi 2 request `PATCH {databaseURL}/families/{mã}/members/{id}.json` — `{"acc":null,"speed":null,"charging":null}` (xoá số liệu cũ) rồi `{lat, lng, battery, online:false, updatedAt:{".sv":"timestamp"}}`. Rules chỉ nhận khi hồ sơ đã tồn tại.
+Kỹ thuật: phím tắt gồm *Lấy vị trí hiện tại* → *Lấy mức pin* → *Văn bản* (mã kết nối = `{databaseURL}/families/{mã}/members/{id}.json`) → *Lấy nội dung của URL* `PATCH` JSON `{lat, lng, battery, speed:0, updatedAt:{".sv":"timestamp"}}`. `speed:0` để không báo “đang di chuyển” theo tốc độ cũ; `online` đã do onDisconnect đặt false. Rules chỉ nhận khi hồ sơ đã tồn tại.
 
 ## Địa điểm quen thuộc
 Bấm **📍 Địa điểm** (góc phải danh sách) → **Thêm địa điểm** → kéo bản đồ cho ghim vào đúng chỗ → chọn biểu tượng, tên, phạm vi (100 / 200 / 400 m) → **Lưu**. Lần đầu app gợi ý sẵn “🏠 Đánh dấu Nhà mình”. Trong thẻ chi tiết của một người còn có nút **⭐ Lưu chỗ này thành địa điểm**.
@@ -148,6 +150,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.12.1 | 24/11/2026 | Viết lại hướng dẫn Phím tắt iPhone thành từng lần chạm (4 phần: sao chép mã → tạo phím tắt → chạy thử → tự động hoá); phím tắt gọn còn 4 tác vụ, 1 request; mã kết nối có sẵn đuôi `.json` |
 | 1.12.0 | 24/11/2026 | iPhone gửi vị trí khi không mở app bằng app **Phím tắt** có sẵn (miễn phí, không cài app): Cài đặt → “📲 Gửi vị trí khi không mở app” có mã kết nối riêng, nút sao chép, hướng dẫn tạo phím tắt + tự động hoá (mở Zalo, cắm sạc, đến/rời nhà, theo giờ); link phím tắt chung đặt ở `shortcutUrl` trong `config.js` |
 | 1.11.1 | 24/11/2026 | Thêm trang [Quyền riêng tư](privacy.html) (link trong Cài đặt). Hướng dẫn cài app iPhone trực tiếp không qua App Store (Sideloadly / AltStore tự ký lại qua Wi-Fi) |
 | 1.11.0 | 24/11/2026 | App native Android & iPhone (thư mục `mobile/`, Capacitor): **vẫn chia sẻ vị trí khi tắt màn hình / dùng app khác**. App mở chính trang web nên sửa web là app tự cập nhật. Khi chạy nền, vị trí và sự kiện đến/rời gửi qua HTTP native (Firebase REST) vì WebView ở nền bị bóp mạng; người đang chạy nền vẫn hiện "đang chia sẻ". Cài đặt có thêm công tắc "Chia sẻ cả khi tắt màn hình" và nút mở quyền vị trí; pin đọc từ hệ điều hành; chia sẻ dùng bảng chia sẻ của máy; nút Back Android đóng hộp thoại rồi đưa app xuống nền. GitHub Actions build `.apk` và `.ipa`. Sửa `viewport-fit` (ghi nhầm `cut`) thành `cover` để nội dung không bị tai thỏ che |
