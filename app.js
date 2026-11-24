@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.13.3";
+const APP_VERSION = "1.13.4";
 const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 // Lỗi JS gần nhất: hiện ở dòng chẩn đoán cuối Cài đặt
@@ -741,24 +741,37 @@ const TILE_SOURCES = [
 const tileStats = { src: 0, ok: 0, err: 0, lastErr: "" };
 let tileLayer = null, tileWatch = 0;
 
+// Máy nào không tải được OSM (mạng/nhà mạng chặn, OSM chặn IP…) thì nhớ lại 1 ngày: lần mở sau dùng
+// thẳng nguồn dự phòng, khỏi chờ bản đồ trắng. Quá 1 ngày thì thử lại OSM.
+const TILE_REMEMBER = 24 * 3600e3;
+const startTileSource = () =>
+  state.tileSrc > 0 && state.tileSrc < TILE_SOURCES.length && Date.now() - (state.tileSrcAt || 0) < TILE_REMEMBER ? state.tileSrc : 0;
+
 function addTiles(i) {
   const s = TILE_SOURCES[i];
   if (tileLayer) tileLayer.remove();
   Object.assign(tileStats, { src: i, ok: 0, err: 0, lastErr: "" });
+  const next = () => {
+    clearTimeout(tileWatch);
+    if (tileStats.ok || i + 1 >= TILE_SOURCES.length || tileStats.src !== i) return;
+    state.tileSrc = i + 1; state.tileSrcAt = Date.now(); saveState();
+    addTiles(i + 1);
+    toast("Đổi sang máy chủ bản đồ dự phòng");
+  };
   tileLayer = L.tileLayer(s.url, { maxZoom: s.maxZoom, maxNativeZoom: s.maxNativeZoom, attribution: s.attribution })
-    .on("tileload", () => { tileStats.ok++; })
+    .on("tileload", () => {
+      tileStats.ok++;
+      if (i === 0 && state.tileSrc) { state.tileSrc = 0; saveState(); } // OSM lại tải được → thôi dự phòng
+    })
     .on("tileerror", (e) => {
       tileStats.err++;
       tileStats.lastErr = `${s.name} ${e.coords ? `${e.coords.z}/${e.coords.x}/${e.coords.y}` : ""}`;
+      if (tileStats.err >= 6 && !tileStats.ok) next(); // lỗi liền 6 ô, chưa ô nào được → đổi ngay
     })
     .addTo(map);
-  // 10 giây mà không tải được ô nào → thử nguồn kế tiếp
+  // Hoặc 8 giây mà vẫn chưa tải được ô nào (mạng treo, không báo lỗi) → thử nguồn kế tiếp
   clearTimeout(tileWatch);
-  tileWatch = setTimeout(() => {
-    if (tileStats.ok || i + 1 >= TILE_SOURCES.length) return;
-    addTiles(i + 1);
-    toast("Đổi sang máy chủ bản đồ dự phòng");
-  }, 10e3);
+  tileWatch = setTimeout(next, 8e3);
 }
 
 function mapDiag() {
@@ -768,12 +781,12 @@ function mapDiag() {
   const dark = matchMedia("(prefers-color-scheme: dark)").matches ? " · tối" : "";
   return `Bản đồ: ${TILE_SOURCES[tileStats.src].name} · ${tileStats.ok} ô ✓ · ${tileStats.err} lỗi` +
     `${tileStats.lastErr ? ` (${tileStats.lastErr})` : ""} · khung ${sz.x}×${sz.y}/${el.clientWidth}×${el.clientHeight}` +
-    ` · zoom ${map.getZoom()}${dark} · ${navigator.onLine ? "có mạng" : "mất mạng"}`;
+    ` · zoom ${Math.round(map.getZoom() * 10) / 10}${dark} · ${navigator.onLine ? "có mạng" : "mất mạng"}`;
 }
 
 function initMap() {
   map = L.map("map", { zoomControl: false, attributionControl: true }).setView([16.05, 106.5], 5);
-  addTiles(0);
+  addTiles(startTileSource());
   map.attributionControl.setPrefix(false);
   // Lớp dây nối ghim ↔ vị trí thật: ngay dưới lớp ghim (600) để dây không đè lên ghim/nhãn tên.
   const tetherPane = map.createPane("tethers");

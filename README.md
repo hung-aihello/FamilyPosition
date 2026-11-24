@@ -151,6 +151,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.13.4 | 24/11/2026 | Máy không tải được OSM (đã xác nhận trên iPhone 14 Pro Max iOS 18.7 và iPhone iOS 16.7: 0 ô, toàn lỗi) thì đổi sang Esri ngay khi lỗi 6 ô, và nhớ 1 ngày để lần mở sau không phải chờ bản đồ trắng |
 | 1.13.3 | 24/11/2026 | Bản đồ tự đổi sang máy chủ dự phòng (Esri) nếu 10 giây không tải được ô OSM nào. Cuối Cài đặt có dòng chẩn đoán bản đồ (nguồn, số ô tải được/lỗi, cỡ khung, iOS/Android, mở bằng gì, lỗi JS gần nhất) để chụp gửi khi báo lỗi |
 | 1.13.2 | 24/11/2026 | Sửa bản đồ trắng trên iPhone đời cũ / Android (lọc màu từng ô thay vì cả lớp, dự phòng Leaflet từ jsDelivr, bỏ `inset`). Bảng danh sách dễ vuốt xuống hơn |
 | 1.13.1 | 24/11/2026 | Link phím tắt chung mới (có trạng thái bộ sạc, mẫu mới). iPhone ghi trạng thái sạc là “Có”/“Không” |
