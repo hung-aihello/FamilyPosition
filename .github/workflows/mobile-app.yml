@@ -1,4 +1,4 @@
-# Build app Nhà Mình cho Android (.apk) và iOS (.ipa chưa ký + bản ký gửi lên TestFlight) trên máy của GitHub.
+# Build app Nhà Mình cho Android (.apk) và iOS (.ipa chưa ký) trên máy của GitHub.
 # Kết quả được đăng ở Release "app": link tải cố định
 #   https://github.com/hung-aihello/FamilyPosition/releases/download/app/NhaMinh.apk
 #   https://github.com/hung-aihello/FamilyPosition/releases/download/app/NhaMinh-unsigned.ipa
@@ -7,9 +7,6 @@ name: App Android & iOS
 
 on:
   workflow_dispatch:
-  # Bản TestFlight hết hạn sau 90 ngày → tự build lại ngày 1 mỗi tháng.
-  schedule:
-    - cron: "0 2 1 * *"
   push:
     branches: [main]
     paths:
@@ -109,77 +106,6 @@ jobs:
         with:
           name: NhaMinh-ios
           path: NhaMinh-unsigned.ipa
-
-  # Ký bằng tài khoản Apple Developer rồi tải lên App Store Connect → TestFlight.
-  # Bỏ qua (không báo lỗi) khi chưa có các secret APPLE_TEAM_ID / ASC_* — xem mobile/README.md.
-  testflight:
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: mobile
-    env:
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-    steps:
-      - name: Kiểm tra secret Apple
-        id: check
-        working-directory: .
-        run: |
-          if [ -n "$APPLE_TEAM_ID" ] && [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -n "$ASC_KEY_P8" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::Chưa cấu hình TestFlight (thiếu secret APPLE_TEAM_ID / ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8) — bỏ qua."
-          fi
-      - if: steps.check.outputs.enabled == 'true'
-        uses: actions/checkout@v4
-      - if: steps.check.outputs.enabled == 'true'
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-      - if: steps.check.outputs.enabled == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-      - if: steps.check.outputs.enabled == 'true'
-        run: npm ci && npx cap sync ios
-
-      # Phiên bản giữ cố định 1.0, chỉ tăng build number: TestFlight chỉ duyệt (Beta App Review)
-      # bản đầu của mỗi phiên bản, các build sau thường được duyệt tự động.
-      # Ký tự động bằng App Store Connect API key (quyền Admin): Xcode tự đăng ký Bundle ID,
-      # tạo chứng chỉ phân phối (cloud-managed) và provisioning profile — không cần Mac.
-      - name: Archive + ký + tải lên TestFlight
-        if: steps.check.outputs.enabled == 'true'
-        run: |
-          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
-          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
-          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
-          xcodebuild "${AUTH[@]}" \
-            -project ios/App/App.xcodeproj -scheme App -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic \
-            MARKETING_VERSION=1.0 CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            archive
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
-            <key>teamID</key><string>$APPLE_TEAM_ID</string>
-            <key>signingStyle</key><string>automatic</string>
-            <key>uploadSymbols</key><true/>
-          </dict></plist>
-          PLIST
-          xcodebuild "${AUTH[@]}" -exportArchive \
-            -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export"
-          rm -f "$KEY"
-          echo "::notice::Đã tải bản 1.0 (build ${{ github.run_number }}) lên App Store Connect. Khoảng 5–30 phút sau sẽ hiện trong TestFlight."
 
   release:
     needs: [android, ios]

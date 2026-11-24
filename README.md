@@ -40,7 +40,7 @@ Trên GitHub: **Settings → Pages → Source: Deploy from a branch → `main` /
 ### 4. Cài lên điện thoại
 **Nên dùng app native** — vẫn gửi vị trí khi tắt màn hình. Xem [`mobile/README.md`](mobile/README.md):
 - **Android:** tải [NhaMinh.apk](https://github.com/hung-aihello/FamilyPosition/releases/download/app/NhaMinh.apk) trên điện thoại rồi cài.
-- **iPhone:** qua **TestFlight** (cần Apple Developer 99 USD/năm, cài bằng link, tự cập nhật) hoặc ký file `.ipa` bằng Sideloadly (Apple ID miễn phí, ký lại mỗi 7 ngày).
+- **iPhone:** tự ký file `.ipa` bằng Apple ID miễn phí (Sideloadly/AltStore trên máy tính) rồi cài thẳng, không qua App Store. Phải ký lại mỗi 7 ngày (AltStore tự làm qua Wi-Fi).
 
 Hoặc dùng bản web (chỉ gửi vị trí khi đang mở app):
 - **Android (Chrome):** mở link → menu ⋮ → **Thêm vào màn hình chính**.
@@ -130,7 +130,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
-| 1.11.1 | 24/11/2026 | Phát hành iPhone qua TestFlight: GitHub Actions tự ký bằng App Store Connect API key và tải lên (bật khi có secret Apple), tự build lại hằng tháng vì bản TestFlight hết hạn sau 90 ngày. Thêm trang [Quyền riêng tư](privacy.html) (link trong Cài đặt) |
+| 1.11.1 | 24/11/2026 | Thêm trang [Quyền riêng tư](privacy.html) (link trong Cài đặt). Hướng dẫn cài app iPhone trực tiếp không qua App Store (Sideloadly / AltStore tự ký lại qua Wi-Fi) |
 | 1.11.0 | 24/11/2026 | App native Android & iPhone (thư mục `mobile/`, Capacitor): **vẫn chia sẻ vị trí khi tắt màn hình / dùng app khác**. App mở chính trang web nên sửa web là app tự cập nhật. Khi chạy nền, vị trí và sự kiện đến/rời gửi qua HTTP native (Firebase REST) vì WebView ở nền bị bóp mạng; người đang chạy nền vẫn hiện "đang chia sẻ". Cài đặt có thêm công tắc "Chia sẻ cả khi tắt màn hình" và nút mở quyền vị trí; pin đọc từ hệ điều hành; chia sẻ dùng bảng chia sẻ của máy; nút Back Android đóng hộp thoại rồi đưa app xuống nền. GitHub Actions build `.apk` và `.ipa`. Sửa `viewport-fit` (ghi nhầm `cut`) thành `cover` để nội dung không bị tai thỏ che |
 | 1.10.1 | 23/11/2026 | Sửa nút 🎵: trình duyệt không cho tự phát nhạc trước lần chạm đầu, nhưng nút vẫn hiện "đang phát" nên chạm vào lại thành tắt nhạc. Giờ lúc chưa được phát, nút toả sóng mời chạm, và chạm vào thì phát nhạc; chạm bất kỳ chỗ nào trên màn hình cũng bật nhạc |
 | 1.10.0 | 23/11/2026 | Âm thanh: lời chào khi mở app (và khi quay lại sau hơn 1 phút), tiếng "pụp" khi chạm, "vút" khi mở/đóng hộp thoại, chuông "kính coong" khi người thân về Nhà, chuông khi đến/rời địa điểm, lấp lánh khi lưu; nhạc nền hộp nhạc tự sáng tác (không lặp lại), tự tắt khi rời app. Nút 🎵 trên bản đồ để bật/tắt nhạc nhanh; Cài đặt có công tắc riêng cho âm thanh và nhạc nền (riêng từng máy). Tự tổng hợp bằng Web Audio, không cần tải file. Trên iPhone âm thanh theo nút gạt im lặng và không cắt nhạc đang nghe |
