@@ -95,7 +95,7 @@ Mở link mời trên máy thứ hai → sau khi nhập tên, app hỏi **“B�
 ## Phím tắt iPhone
 Trình duyệt trên iPhone không cho web lấy vị trí khi không mở app. App **Phím tắt** (có sẵn) thì được: tự động hoá chạy phím tắt “Nhà Mình” khi **mở Zalo/Facebook**, **cắm sạc**, **đến/rời nhà**, hoặc **theo giờ** — mỗi lần chạy gửi vị trí + mức pin lên nhóm. Không cài app, không hết hạn, miễn phí.
 
-**Người tạo nhóm (một lần, ~10 phút):** trên iPhone mở Nhà Mình → ⚙️ Cài đặt → 📲 Gửi vị trí khi không mở app → làm theo phần 1–3 trên màn hình (tạo phím tắt 4 tác vụ, có hướng dẫn từng lần chạm) → chia sẻ phím tắt → **Sao chép liên kết iCloud** → dán vào `shortcutUrl` trong [`config.js`](config.js) → push. Từ đó cả nhà chỉ cần bấm **➕ Thêm phím tắt**.
+**Người tạo nhóm (một lần, ~10 phút):** trên iPhone mở Nhà Mình → ⚙️ Cài đặt → 📲 Gửi vị trí khi không mở app → làm theo phần 1–3 trên màn hình (tạo phím tắt 5 tác vụ, có hướng dẫn từng lần chạm) → thay mã của mình trong phím tắt bằng `DÁN MÃ VÀO ĐÂY` (link nằm trong repo công khai, không được chứa mã nhóm) → chia sẻ phím tắt → **Sao chép liên kết iCloud** → dán lại mã của mình → dán vào `shortcutUrl` trong [`config.js`](config.js) → push. Từ đó cả nhà chỉ cần bấm **➕ Thêm phím tắt**.
 
 **Mỗi người (~5 phút):** Cài đặt → 📲 Gửi vị trí khi không mở app → **Sao chép mã** → **Thêm phím tắt** → dán mã vào khung *Văn bản* (thay chữ DÁN MÃ VÀO ĐÂY) → chạy thử 1 lần (cho phép vị trí + kết nối) → tạo các tự động hoá theo hướng dẫn trên màn hình, chọn **Chạy ngay lập tức**.
 
@@ -150,6 +150,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.12.4 | 24/11/2026 | Gắn link iCloud phím tắt “Nhà Mình” (không chứa mã của ai): người nhà bấm **➕ Thêm phím tắt**, dán mã của mình, tạo tự động hoá |
 | 1.12.3 | 24/11/2026 | Sửa phím tắt iPhone bị *Permission denied* khi gửi vị trí: iPhone cài tiếng Việt gửi số thập phân có dấu phẩy ở kiểu JSON → đổi sang khung Văn bản (mẫu có nút **📋 Sao chép mẫu**) gửi dạng Tệp. Đã chạy được trên iPhone thật |
 | 1.12.2 | 24/11/2026 | Hướng dẫn Phím tắt: đổi tên nhãn cho khớp iOS mới (“Yêu cầu nội dung”), cảnh báo 2 lỗi gây *Permission denied* (chọn nhầm loại Văn bản, gõ sai tên trường) — đã chạy thử thành công trên iPhone thật |
 | 1.12.1 | 24/11/2026 | Viết lại hướng dẫn Phím tắt iPhone thành từng lần chạm (4 phần: sao chép mã → tạo phím tắt → chạy thử → tự động hoá); phím tắt gọn còn 4 tác vụ, 1 request; mã kết nối có sẵn đuôi `.json` |
