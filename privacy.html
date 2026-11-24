@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nhà Mình — Quyền riêng tư</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <style>
+    :root { color-scheme: light dark; --muted: #57534e; --accent: #0f766e; }
+    @media (prefers-color-scheme: dark) { :root { --muted: #a8a29e; --accent: #2dd4bf; } body { background: #1c1917; color: #f5f5f4; } }
+    body { margin: 0; font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: #f6f4ef; color: #1c1917; }
+    main { max-width: 680px; margin: 0 auto; padding: calc(32px + env(safe-area-inset-top)) 20px calc(48px + env(safe-area-inset-bottom)); }
+    h1 { font-size: 28px; margin: 0 0 4px; }
+    h2 { font-size: 19px; margin: 32px 0 8px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    ul { padding-left: 22px; }
+    li { margin: 4px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>🏡 Nhà Mình — Quyền riêng tư</h1>
+  <p class="muted">Cập nhật ngày 24/11/2026. Áp dụng cho trang web và app Nhà Mình trên Android/iPhone.</p>
+
+  <p>Nhà Mình là ứng dụng gia đình tự làm, không bán, không quảng cáo. Mục đích duy nhất: cho những người trong
+    cùng một nhóm gia đình thấy nhau đang ở đâu.</p>
+
+  <h2>Dữ liệu được lưu</h2>
+  <ul>
+    <li><strong>Hồ sơ:</strong> tên hiển thị, hình emoji, màu, ảnh đại diện (nếu bạn chọn).</li>
+    <li><strong>Vị trí:</strong> toạ độ, sai số GPS, tốc độ, thời điểm cập nhật — chỉ khi bạn bật chia sẻ vị trí.</li>
+    <li><strong>Pin:</strong> mức pin và đang sạc hay không.</li>
+    <li><strong>Địa điểm quen thuộc</strong> của nhóm (vd “Nhà”) và lịch sử đến/rời trong 3 ngày gần nhất.</li>
+    <li>Một mã ngẫu nhiên định danh máy, lưu trên máy để nhớ bạn là ai. Không có tài khoản, email hay số điện thoại.</li>
+  </ul>
+
+  <h2>Ai thấy được</h2>
+  <p>Chỉ những người có <strong>mã nhóm</strong> của gia đình bạn. Mã nhóm là ngẫu nhiên và không thể liệt kê.
+    Dữ liệu không được chia sẻ, bán hay dùng cho quảng cáo, và không dùng để theo dõi bạn qua app hay trang web khác.</p>
+
+  <h2>Vị trí khi chạy nền</h2>
+  <p>Trong app Android/iPhone, nếu bạn bật <em>Chia sẻ cả khi tắt màn hình</em>, app tiếp tục gửi vị trí khi chạy nền
+    để người nhà vẫn thấy bạn. Android hiện một thông báo cố định trong lúc đó; iPhone hiện biểu tượng vị trí trên thanh trạng thái.
+    Tắt bất cứ lúc nào trong <em>⚙️ Cài đặt</em> hoặc trong cài đặt quyền vị trí của điện thoại.</p>
+
+  <h2>Dịch vụ bên thứ ba</h2>
+  <ul>
+    <li><strong>Google Firebase Realtime Database</strong> (máy chủ ở Singapore) — lưu dữ liệu nêu trên.</li>
+    <li><strong>Google reCAPTCHA / Firebase App Check</strong> — chặn bot truy cập dữ liệu
+      (<a href="https://policies.google.com/privacy">Chính sách của Google</a>).</li>
+    <li><strong>OpenStreetMap</strong> — tải ảnh bản đồ; tra địa chỉ gần đúng (Nominatim) chỉ khi bạn mở thẻ chi tiết của một người.</li>
+  </ul>
+
+  <h2>Xoá dữ liệu</h2>
+  <p>Vào <em>⚙️ Cài đặt → Rời khỏi nhóm gia đình</em>: hồ sơ, vị trí và ảnh của bạn bị xoá khỏi máy chủ.
+    Tắt <em>Chia sẻ vị trí của tôi</em> sẽ xoá vị trí đang lưu. Lịch sử đến/rời tự xoá sau 3 ngày.</p>
+
+  <h2>Liên hệ</h2>
+  <p>Hỏi trực tiếp người đã mời bạn vào nhóm, hoặc mở issue tại
+    <a href="https://github.com/hung-aihello/FamilyPosition/issues">github.com/hung-aihello/FamilyPosition</a>.</p>
+</main>
+</body>
+</html>
