@@ -40,7 +40,8 @@ Trên GitHub: **Settings → Pages → Source: Deploy from a branch → `main` /
 ### 4. Cài lên điện thoại
 **Nên dùng app native** — vẫn gửi vị trí khi tắt màn hình. Xem [`mobile/README.md`](mobile/README.md):
 - **Android:** tải [NhaMinh.apk](https://github.com/hung-aihello/FamilyPosition/releases/download/app/NhaMinh.apk) trên điện thoại rồi cài.
-- **iPhone:** tự ký file `.ipa` bằng Apple ID miễn phí (Sideloadly/AltStore trên máy tính) rồi cài thẳng, không qua App Store. Phải ký lại mỗi 7 ngày (AltStore tự làm qua Wi-Fi).
+- **iPhone (khuyên dùng — miễn phí, không cài app):** dùng bản web như bên dưới, rồi **⚙️ Cài đặt → 📲 Gửi vị trí khi không mở app** để thiết lập app *Phím tắt* có sẵn của iPhone tự gửi vị trí mỗi khi mở Zalo, cắm sạc, đến/rời nhà, theo giờ. Xem [Phím tắt iPhone](#phím-tắt-iphone).
+- iPhone (cách khác): tự ký file `.ipa` của app native bằng Apple ID miễn phí (Sideloadly/AltStore) — phải ký lại mỗi 7 ngày.
 
 Hoặc dùng bản web (chỉ gửi vị trí khi đang mở app):
 - **Android (Chrome):** mở link → menu ⋮ → **Thêm vào màn hình chính**.
@@ -53,6 +54,8 @@ App Check bắt mọi request tới database phải đến từ chính trang web
 2. Firebase Console → **App Check → Apps** → mở web app → **reCAPTCHA Enterprise** → dán Key ID → đặt **Token TTL = 1 ngày** (giảm số lượt kiểm tra) → Save.
 3. Dán Key ID vào `appCheckSiteKey` trong `config.js` → push.
 4. Đợi 1–2 ngày, xem **App Check → APIs → Realtime Database**: khi gần như 100% request là *Verified* thì bấm **Enforce**.
+
+> ⚠️ **Đang dùng Phím tắt iPhone thì đừng Enforce**: phím tắt ghi thẳng qua REST, không có token App Check, sẽ bị chặn.
 
 > ⚠️ Chỉ Enforce **Realtime Database**. Đừng Enforce Firestore/Storage nếu app khác dùng chung project mà chưa tích hợp App Check — app đó sẽ bị chặn.
 
@@ -88,6 +91,21 @@ Mở link mời trên máy thứ hai → sau khi nhập tên, app hỏi **“B�
 - Máy định vị kém (sai số > 1 km, thường là laptop) không ghi đè vị trí tốt mà điện thoại gửi trong 10 phút gần đây.
 - Đổi tên/hình ở một máy thì các máy khác tự cập nhật. Rời nhóm ở một máy thì mọi máy của người đó cùng thoát.
 - Lỡ tạo tài khoản rác trên máy mới: trên máy đó **Rời nhóm** → mở lại link mời → chọn đúng tên mình.
+
+## Phím tắt iPhone
+Trình duyệt trên iPhone không cho web lấy vị trí khi không mở app. App **Phím tắt** (có sẵn) thì được: tự động hoá chạy phím tắt “Nhà Mình” khi **mở Zalo/Facebook**, **cắm sạc**, **đến/rời nhà**, hoặc **theo giờ** — mỗi lần chạy gửi vị trí + mức pin lên nhóm. Không cài app, không hết hạn, miễn phí.
+
+**Người tạo nhóm (một lần, ~10 phút):** trên iPhone mở Nhà Mình → ⚙️ Cài đặt → 📲 Gửi vị trí khi không mở app → mở **Tự tạo phím tắt** → làm theo 6 tác vụ → chia sẻ phím tắt → **Sao chép liên kết iCloud** → dán vào `shortcutUrl` trong [`config.js`](config.js) → push. Từ đó cả nhà chỉ cần bấm **➕ Thêm phím tắt**.
+
+**Mỗi người (~5 phút):** Cài đặt → 📲 Gửi vị trí khi không mở app → **Sao chép mã** → **Thêm phím tắt** → dán mã vào dòng *DÁN MÃ VÀO ĐÂY* → chạy thử 1 lần (cho phép vị trí + kết nối) → tạo 4 tự động hoá theo hướng dẫn trên màn hình, chọn **Chạy ngay**.
+
+Giới hạn:
+- Vị trí cập nhật **theo sự kiện**, không liên tục — người nhà thấy “x phút trước”. Mở Zalo càng thường thì càng mới.
+- Không có tốc độ / sai số GPS; “Ở Nhà” được các máy tự tính từ toạ độ. Dòng thời gian *đã về / đã rời* và chuông chỉ có khi người đó mở Nhà Mình.
+- **Mã kết nối gắn với nhóm hiện tại**: Đổi mã nhóm / rời nhóm thì phải dán lại mã mới vào phím tắt.
+- Không dùng được nếu bật Enforce App Check (xem trên).
+
+Kỹ thuật: mỗi lần chạy, phím tắt gửi 2 request `PATCH {databaseURL}/families/{mã}/members/{id}.json` — `{"acc":null,"speed":null,"charging":null}` (xoá số liệu cũ) rồi `{lat, lng, battery, online:false, updatedAt:{".sv":"timestamp"}}`. Rules chỉ nhận khi hồ sơ đã tồn tại.
 
 ## Địa điểm quen thuộc
 Bấm **📍 Địa điểm** (góc phải danh sách) → **Thêm địa điểm** → kéo bản đồ cho ghim vào đúng chỗ → chọn biểu tượng, tên, phạm vi (100 / 200 / 400 m) → **Lưu**. Lần đầu app gợi ý sẵn “🏠 Đánh dấu Nhà mình”. Trong thẻ chi tiết của một người còn có nút **⭐ Lưu chỗ này thành địa điểm**.
@@ -130,6 +148,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.12.0 | 24/11/2026 | iPhone gửi vị trí khi không mở app bằng app **Phím tắt** có sẵn (miễn phí, không cài app): Cài đặt → “📲 Gửi vị trí khi không mở app” có mã kết nối riêng, nút sao chép, hướng dẫn tạo phím tắt + tự động hoá (mở Zalo, cắm sạc, đến/rời nhà, theo giờ); link phím tắt chung đặt ở `shortcutUrl` trong `config.js` |
 | 1.11.1 | 24/11/2026 | Thêm trang [Quyền riêng tư](privacy.html) (link trong Cài đặt). Hướng dẫn cài app iPhone trực tiếp không qua App Store (Sideloadly / AltStore tự ký lại qua Wi-Fi) |
 | 1.11.0 | 24/11/2026 | App native Android & iPhone (thư mục `mobile/`, Capacitor): **vẫn chia sẻ vị trí khi tắt màn hình / dùng app khác**. App mở chính trang web nên sửa web là app tự cập nhật. Khi chạy nền, vị trí và sự kiện đến/rời gửi qua HTTP native (Firebase REST) vì WebView ở nền bị bóp mạng; người đang chạy nền vẫn hiện "đang chia sẻ". Cài đặt có thêm công tắc "Chia sẻ cả khi tắt màn hình" và nút mở quyền vị trí; pin đọc từ hệ điều hành; chia sẻ dùng bảng chia sẻ của máy; nút Back Android đóng hộp thoại rồi đưa app xuống nền. GitHub Actions build `.apk` và `.ipa`. Sửa `viewport-fit` (ghi nhầm `cut`) thành `cover` để nội dung không bị tai thỏ che |
 | 1.10.1 | 23/11/2026 | Sửa nút 🎵: trình duyệt không cho tự phát nhạc trước lần chạm đầu, nhưng nút vẫn hiện "đang phát" nên chạm vào lại thành tắt nhạc. Giờ lúc chưa được phát, nút toả sóng mời chạm, và chạm vào thì phát nhạc; chạm bất kỳ chỗ nào trên màn hình cũng bật nhạc |

@@ -13,3 +13,9 @@ export const firebaseConfig = {
 // Site key reCAPTCHA Enterprise (score-based) cho Firebase App Check (công khai, không phải bí mật).
 // Để trống "" thì app chạy không có App Check.
 export const appCheckSiteKey = "6LdFvi0uAAAAADOawbwEZC7gyiJa1jNY8pitxluF";
+
+// Link iCloud của phím tắt "Nhà Mình" (app Phím tắt trên iPhone) — gửi vị trí khi không mở app.
+// Tạo một lần theo hướng dẫn trong app (⚙️ Cài đặt → Gửi vị trí khi không mở app) rồi dán link vào đây.
+// Để trống "" thì hộp thoại chỉ hiện hướng dẫn tự tạo.
+// ⚠️ Phím tắt ghi thẳng qua REST nên KHÔNG chạy được nếu bật Enforce App Check cho Realtime Database.
+export const shortcutUrl = "";

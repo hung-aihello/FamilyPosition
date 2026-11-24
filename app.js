@@ -1,9 +1,9 @@
-import { firebaseConfig, appCheckSiteKey } from "./config.js";
+import { firebaseConfig, appCheckSiteKey, shortcutUrl } from "./config.js";
 import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.11.1";
+const APP_VERSION = "1.12.0";
 const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -1968,6 +1968,9 @@ function bindMainUi() {
     copyLink();
   });
   $("#copyLink").addEventListener("click", copyLink);
+  $("#openShortcut").hidden = native.isNative; // app native đã tự gửi khi chạy nền
+  $("#openShortcut").addEventListener("click", () => { $("#settingsDialog").close(); openShortcut(); });
+  $("#copyShortcutCode").addEventListener("click", copyShortcutCode);
 
   $("#saveSettings").addEventListener("click", saveSettings);
   // Âm thanh: áp dụng ngay khi gạt (cài đặt riêng của máy này, không cần bấm Lưu)
@@ -2020,6 +2023,41 @@ function openInvite() {
   }
   $("#familyCodeDisplay").textContent = formatCode(state.familyId);
   $("#inviteDialog").showModal();
+}
+
+/* ---- Phím tắt iPhone: gửi vị trí khi không mở app ----
+ * Bản web không chạy nền được trên iPhone. App Phím tắt (có sẵn) thì chạy được theo tự động hoá
+ * (mở Zalo, cắm sạc, đến/rời nhà, giờ cố định) và PATCH thẳng vào hồ sơ qua Firebase REST:
+ *   1) {"acc":null,"speed":null,"charging":null} — xoá số liệu cũ (Phím tắt không có sai số/tốc độ;
+ *      để lại tốc độ cũ thì thẻ chi tiết sẽ báo "đang di chuyển" sai)
+ *   2) { lat, lng, battery, online: false, updatedAt: {".sv": "timestamp"} }
+ * Mã kết nối = URL hồ sơ của mình (không có ".json"). Hồ sơ phải tồn tại sẵn (rules đòi có "name"),
+ * nên rời nhóm / đổi mã nhóm / bị xoá thì phím tắt cũ tự bị từ chối.
+ * Địa điểm (Ở Nhà…) được các máy xem tự tính từ toạ độ (memberPlace); đến/rời chỉ ghi khi mở app. */
+const shortcutCode = () => `${firebaseConfig.databaseURL}/families/${state.familyId}/members/${state.memberId}`;
+
+function openShortcut() {
+  $("#shortcutCode").value = shortcutCode();
+  $("#shortcutLink").hidden = !shortcutUrl;
+  if (shortcutUrl) $("#shortcutLink").href = shortcutUrl;
+  $("#shortcutNoLink").hidden = !!shortcutUrl;
+  $(".howto").open = !shortcutUrl;
+  const mine = members[state.memberId];
+  $("#shortcutStatus").textContent = !state.sharing
+    ? "⚠️ Bạn đang tắt “Chia sẻ vị trí của tôi” — bật lại trong Cài đặt thì người nhà mới thấy."
+    : mine?.updatedAt ? `Vị trí của bạn cập nhật lần cuối: ${clockTime(mine.updatedAt)} (${relTime(now() - mine.updatedAt)})` : "";
+  $("#shortcutDialog").showModal();
+}
+
+async function copyShortcutCode() {
+  try {
+    await navigator.clipboard.writeText(shortcutCode());
+    sound.success();
+    toast("Đã sao chép mã ✓ Giờ dán vào phím tắt nhé.");
+  } catch {
+    $("#shortcutCode").select();
+    prompt("Sao chép mã này:", shortcutCode());
+  }
 }
 
 async function copyLink() {

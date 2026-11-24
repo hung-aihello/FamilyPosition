@@ -259,6 +259,75 @@
     </div>
   </dialog>
 
+  <!-- ============ DIALOG: KẾT NỐI PHÍM TẮT IPHONE ============ -->
+  <dialog id="shortcutDialog" class="modal" aria-labelledby="shortcutTitle">
+    <div class="modal-body">
+      <h2 id="shortcutTitle" tabindex="-1" autofocus>Gửi vị trí khi không mở app</h2>
+      <p class="muted">Dùng app <strong>Phím tắt</strong> có sẵn trên iPhone: máy tự gửi vị trí của bạn mỗi khi
+        mở Zalo, cắm sạc, về/rời nhà… kể cả lúc không mở Nhà Mình. Làm một lần, khoảng 5 phút.</p>
+
+      <ol class="steps">
+        <li>
+          <strong>Sao chép mã kết nối của bạn</strong>
+          <input id="shortcutCode" class="input mono code-box" type="text" readonly aria-label="Mã kết nối">
+          <button id="copyShortcutCode" class="btn btn-primary" type="button">📋 Sao chép mã</button>
+          <small>Mã này là chìa khoá vị trí của bạn — đừng gửi cho người ngoài nhà.</small>
+        </li>
+        <li>
+          <strong>Thêm phím tắt “Nhà Mình”</strong>
+          <a id="shortcutLink" class="btn btn-secondary" href="#" target="_blank" rel="noopener">➕ Thêm phím tắt</a>
+          <small id="shortcutNoLink" hidden>Chưa có link chung — mở phần “Tự tạo phím tắt” bên dưới.</small>
+        </li>
+        <li>
+          <strong>Dán mã vào phím tắt</strong>
+          <small>App <em>Phím tắt</em> → giữ ngón tay trên ô <em>Nhà Mình</em> → <em>Sửa</em> → chạm dòng
+            <em>DÁN MÃ VÀO ĐÂY</em> → xoá chữ đó → <em>Dán</em> → <em>Xong</em>.<br>
+            Chạm ô <em>Nhà Mình</em> để chạy thử: cho phép vị trí và cho phép kết nối (<em>Luôn cho phép</em>).</small>
+        </li>
+        <li>
+          <strong>Cho máy tự chạy</strong>
+          <small>App <em>Phím tắt</em> → tab <em>Tự động hoá</em> → <em>+</em> → chọn một mục dưới đây →
+            chọn <em>Chạy ngay</em> (tắt <em>Thông báo khi chạy</em>) → <em>Tiếp</em> → chọn <em>Nhà Mình</em>. Nên tạo cả 4:</small>
+          <ul class="triggers">
+            <li>💬 <em>Ứng dụng</em> → chọn Zalo, Facebook, Messenger… → <em>Được mở</em></li>
+            <li>🔌 <em>Bộ sạc</em> → <em>Được kết nối</em></li>
+            <li>🏠 <em>Đến</em> và <em>Rời</em> → chọn vị trí nhà mình</li>
+            <li>⏰ <em>Thời gian trong ngày</em> → vài mốc, vd 7:00 · 12:00 · 17:00 · 21:00</li>
+          </ul>
+        </li>
+      </ol>
+
+      <p class="shortcut-status" id="shortcutStatus"></p>
+
+      <details class="howto">
+        <summary>Tự tạo phím tắt (khi chưa có link chung)</summary>
+        <p>App <em>Phím tắt</em> → <em>+</em> → đặt tên <strong>Nhà Mình</strong>, rồi thêm lần lượt các tác vụ:</p>
+        <ol>
+          <li><em>Văn bản</em>: gõ <code>DÁN MÃ VÀO ĐÂY</code>.</li>
+          <li><em>Văn bản</em> (thứ hai): <code id="shortcutNullJson">{"acc":null,"speed":null,"charging":null}</code></li>
+          <li><em>Lấy nội dung của URL</em>: URL = biến <em>Văn bản</em> (của tác vụ 1) rồi gõ liền <code>.json</code> ·
+            Phương thức <code>PATCH</code> · Phần thân yêu cầu <em>Tệp</em> = biến <em>Văn bản</em> (của tác vụ 2).</li>
+          <li><em>Lấy vị trí hiện tại</em>.</li>
+          <li><em>Lấy mức pin</em>.</li>
+          <li><em>Lấy nội dung của URL</em>: URL giống tác vụ 3 · Phương thức <code>PATCH</code> ·
+            Phần thân yêu cầu <em>JSON</em>, thêm các trường:
+            <ul>
+              <li><code>lat</code> · Số · biến <em>Vị trí hiện tại</em> → chọn <em>Vĩ độ</em></li>
+              <li><code>lng</code> · Số · biến <em>Vị trí hiện tại</em> → chọn <em>Kinh độ</em></li>
+              <li><code>battery</code> · Số · biến <em>Mức pin</em></li>
+              <li><code>online</code> · Boolean · <em>Sai</em></li>
+              <li><code>updatedAt</code> · Từ điển · bên trong thêm <code>.sv</code> · Văn bản · <code>timestamp</code></li>
+            </ul>
+          </li>
+        </ol>
+        <p>Tạo xong: chạm <em>⋯</em> / biểu tượng chia sẻ → <em>Sao chép liên kết iCloud</em> để gửi cho cả nhà
+          (mỗi người tự dán mã của mình ở bước 3).</p>
+      </details>
+
+      <button class="btn btn-ghost" type="button" data-close>Đóng</button>
+    </div>
+  </dialog>
+
   <!-- ============ DIALOG: CÀI ĐẶT ============ -->
   <dialog id="settingsDialog" class="modal" aria-labelledby="settingsTitle">
     <div class="modal-body">
@@ -309,6 +378,11 @@
         </div>
         <button id="openAppSettings" class="btn btn-secondary" type="button">📍 Mở quyền vị trí của app</button>
       </div>
+
+      <!-- Bản web: iPhone gửi vị trí khi không mở app nhờ app Phím tắt (xem openShortcut trong app.js) -->
+      <button id="openShortcut" class="btn btn-secondary shortcut-entry" type="button">
+        📲 Gửi vị trí khi không mở app (iPhone)
+      </button>
 
       <div class="switch-row">
         <span>
