@@ -150,6 +150,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.12.2 | 24/11/2026 | Hướng dẫn Phím tắt: đổi tên nhãn cho khớp iOS mới (“Yêu cầu nội dung”), cảnh báo 2 lỗi gây *Permission denied* (chọn nhầm loại Văn bản, gõ sai tên trường) — đã chạy thử thành công trên iPhone thật |
 | 1.12.1 | 24/11/2026 | Viết lại hướng dẫn Phím tắt iPhone thành từng lần chạm (4 phần: sao chép mã → tạo phím tắt → chạy thử → tự động hoá); phím tắt gọn còn 4 tác vụ, 1 request; mã kết nối có sẵn đuôi `.json` |
 | 1.12.0 | 24/11/2026 | iPhone gửi vị trí khi không mở app bằng app **Phím tắt** có sẵn (miễn phí, không cài app): Cài đặt → “📲 Gửi vị trí khi không mở app” có mã kết nối riêng, nút sao chép, hướng dẫn tạo phím tắt + tự động hoá (mở Zalo, cắm sạc, đến/rời nhà, theo giờ); link phím tắt chung đặt ở `shortcutUrl` trong `config.js` |
 | 1.11.1 | 24/11/2026 | Thêm trang [Quyền riêng tư](privacy.html) (link trong Cài đặt). Hướng dẫn cài app iPhone trực tiếp không qua App Store (Sideloadly / AltStore tự ký lại qua Wi-Fi) |

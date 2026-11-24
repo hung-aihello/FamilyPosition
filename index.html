@@ -329,11 +329,14 @@
             <small>Nếu nó ghi tên khác: chạm vào chữ màu xanh đó → <b>Xoá</b>, chạm lại vào ô → chọn <span class="sc-var">Văn bản</span> trên thanh phía trên bàn phím.</small></li>
           <li>Bấm vào <b>mũi tên ›</b> (hoặc chữ <b>Hiển thị thêm</b>) ở bên phải tác vụ để mở rộng.</li>
           <li>Dòng <b>Phương thức</b>: chạm chữ <b>GET</b> → chọn <b>PATCH</b>.</li>
-          <li>Dòng <b>Phần thân yêu cầu</b>: để là <b>JSON</b> (nếu đang khác thì chạm vào để chọn <b>JSON</b>).</li>
+          <li>Dòng <b>Yêu cầu nội dung</b> (iOS cũ ghi <i>Phần thân yêu cầu</i>): để là <b>JSON</b> (nếu đang khác thì chạm vào để chọn <b>JSON</b>).</li>
         </ol>
 
         <h4>f) Thêm 5 trường vào phần JSON</h4>
         <p class="sc-note">Mỗi trường làm giống nhau: chạm <b>Thêm trường mới</b> → chọn loại → gõ <b>Khoá</b> (tên, chữ thường, không dấu cách) → điền <b>Giá trị</b>.</p>
+        <p class="sc-warn">⚠️ Hai lỗi hay gặp nhất, làm phím tắt báo <i>Permission denied</i>:
+          chọn nhầm loại <b>Văn bản</b> cho lat/lng/battery/speed (phải là <b>Số</b>; trên màn hình hai loại trông y hệt nhau),
+          và gõ sai tên một chữ (vd <code>updateAt</code> thiếu chữ d). Gõ đúng từng chữ như trong bảng.</p>
         <table class="sc-fields">
           <thead><tr><th>Loại</th><th>Khoá</th><th>Giá trị</th></tr></thead>
           <tbody>

@@ -870,3 +870,5 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
   70%, 100% { box-shadow: var(--shadow), 0 0 0 14px color-mix(in srgb, var(--primary) 0%, transparent); }
 }
 @media (prefers-reduced-motion: reduce) { .music-fab svg, .music-fab.waiting { animation: none !important; } }
+.sc-warn { font-size: 14px; margin: 8px 0; padding: 10px 12px; border-radius: 12px; background: #fef3c7; color: #78350f; }
+@media (prefers-color-scheme: dark) { .sc-warn { background: #422006; color: #fde68a; } }
