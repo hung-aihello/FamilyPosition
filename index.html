@@ -270,12 +270,14 @@
 
       <!-- PHẦN 1 -->
       <section class="sc-part">
-        <h3><span class="sc-num">1</span> Hai thứ cần sao chép</h3>
+        <h3><span class="sc-num">1</span> <span id="shortcutPart1Title">Hai thứ cần sao chép</span></h3>
         <p class="sc-note">Chưa bấm vội. Các bước ở phần 2 sẽ bảo lúc nào quay lại đây bấm nút nào.</p>
-        <label class="sc-label" for="shortcutBody">🅰 Mẫu gửi vị trí (giống nhau cho mọi người)</label>
-        <input id="shortcutBody" class="input mono code-box" type="text" readonly>
-        <button id="copyShortcutBody" class="btn btn-secondary" type="button">📋 Sao chép mẫu</button>
-        <label class="sc-label" for="shortcutCode">🅱 Mã của bạn</label>
+        <div id="shortcutBodyRow">
+          <label class="sc-label" for="shortcutBody">🅰 Mẫu gửi vị trí (giống nhau cho mọi người)</label>
+          <input id="shortcutBody" class="input mono code-box" type="text" readonly>
+          <button id="copyShortcutBody" class="btn btn-secondary" type="button">📋 Sao chép mẫu</button>
+        </div>
+        <label class="sc-label" for="shortcutCode" id="shortcutCodeLabel">🅱 Mã của bạn</label>
         <input id="shortcutCode" class="input mono code-box" type="text" readonly>
         <button id="copyShortcutCode" class="btn btn-primary" type="button">📋 Sao chép mã</button>
         <p class="sc-note">Mã là riêng của từng người: mỗi người lấy mã trên máy của chính mình, và đừng gửi mã cho người ngoài.</p>
@@ -287,7 +289,7 @@
         <ol class="sc-steps">
           <li>Bấm nút này: <a id="shortcutLink" class="btn btn-secondary" href="#" target="_blank" rel="noopener">➕ Thêm phím tắt</a></li>
           <li>App Phím tắt mở ra → bấm <b>Thêm phím tắt</b>.</li>
-          <li>Quay lại đây, bấm <b>📋 Sao chép mã</b> (🅱 ở phần 1).</li>
+          <li>Quay lại đây, bấm <b>📋 Sao chép mã</b> ở phần 1.</li>
           <li>Mở app Phím tắt, tab <b>Phím tắt</b> → bấm <b>dấu ⋯</b> ở góc ô <b>Nhà Mình</b>.</li>
           <li>Tìm khung <b>Văn bản</b> có chữ <code>DÁN MÃ VÀO ĐÂY</code> (khung thứ hai, ngay trên “Lấy nội dung của URL”).
             Chạm vào chữ đó → xoá hết.</li>
@@ -448,6 +450,10 @@
       <button id="openShortcut" class="btn btn-secondary shortcut-entry" type="button">
         📲 Gửi vị trí khi không mở app (iPhone)
       </button>
+      <a id="androidApk" class="btn btn-secondary shortcut-entry" hidden
+        href="https://github.com/hung-aihello/FamilyPosition/releases/download/app/NhaMinh.apk">
+        🤖 Cài app Android: gửi vị trí cả khi tắt màn hình
+      </a>
 
       <div class="switch-row">
         <span>

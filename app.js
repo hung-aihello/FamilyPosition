@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.12.4";
+const APP_VERSION = "1.12.5";
 const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -1968,7 +1968,10 @@ function bindMainUi() {
     copyLink();
   });
   $("#copyLink").addEventListener("click", copyLink);
-  $("#openShortcut").hidden = native.isNative; // app native đã tự gửi khi chạy nền
+  // App native đã tự gửi khi chạy nền. Web trên Android: mời cài APK (Phím tắt chỉ có trên iPhone).
+  const androidWeb = !native.isNative && /Android/i.test(navigator.userAgent);
+  $("#openShortcut").hidden = native.isNative || androidWeb;
+  $("#androidApk").hidden = !androidWeb;
   $("#openShortcut").addEventListener("click", () => { $("#settingsDialog").close(); openShortcut(); });
   $("#copyShortcutCode").addEventListener("click", copyShortcutCode);
   $("#copyShortcutBody").addEventListener("click", copyShortcutBody);
@@ -2046,6 +2049,9 @@ function openShortcut() {
   $("#shortcutBody").value = SHORTCUT_BODY;
   $("#shortcutEasy").hidden = !shortcutUrl;
   $("#shortcutManual").hidden = !!shortcutUrl;
+  $("#shortcutBodyRow").hidden = !!shortcutUrl; // phím tắt chung đã có sẵn mẫu, chỉ cần mã
+  $("#shortcutCodeLabel").hidden = !!shortcutUrl; // tiêu đề phần 1 đã ghi "Mã của bạn"
+  $("#shortcutPart1Title").textContent = shortcutUrl ? "Mã của bạn" : "Hai thứ cần sao chép";
   if (shortcutUrl) $("#shortcutLink").href = shortcutUrl;
   const mine = members[state.memberId];
   $("#shortcutStatus").textContent = !state.sharing
