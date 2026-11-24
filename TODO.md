@@ -8,7 +8,7 @@ Cập nhật 24/11/2026, bản 1.13.0.
   Mẫu phím tắt mới có thêm `acc:null`, `charging`, `chargingAt`. Rules đã nhận `charging` dạng chuỗi và có thêm `chargingAt`.
 - [x] **Đã về / đã rời cho người dùng phím tắt**: máy nào đang mở app ghi giúp (`trackOthersPlaces`).
   Giờ ghi là lúc phím tắt gửi. Khoá sự kiện cố định theo `updatedAt`, nên nhiều máy cùng ghi vẫn chỉ ra một sự kiện.
-- [ ] **Người quản lý nhóm cập nhật phím tắt rồi chia sẻ lại link** (hướng dẫn trong app: phần “🛠 Tự tạo phím tắt”):
+- [x] **Người quản lý nhóm cập nhật phím tắt rồi chia sẻ lại link** (xong 24/11: link `9ed88747…`; người nhà đã cài bản cũ thì cài lại từ link mới) (hướng dẫn trong app: phần “🛠 Tự tạo phím tắt”):
   1. Thêm tác vụ *Lấy mức pin* thứ hai, chọn mục về bộ sạc.
   2. Sao chép mẫu mới, thay khung mẫu, rồi chèn lại các biến LAT/LNG/PIN/SAC.
   3. Thay mã bằng `DÁN MÃ VÀO ĐÂY` → chia sẻ → lấy link iCloud mới → dán lại mã của mình.
@@ -18,7 +18,7 @@ Cập nhật 24/11/2026, bản 1.13.0.
   6. Người đã cài phím tắt cũ thì cài lại từ link mới.
 
   Phím tắt cũ vẫn gửi vị trí bình thường, nhưng không có ⚡ và không được ghi đến/rời giúp.
-- [ ] Xem chữ iPhone ghi cho trạng thái bộ sạc là gì (“Đúng”/“Có”/“Yes”…). Nếu chữ đó không nằm trong `CHARGING_WORDS` thì thêm vào.
+- [x] iPhone tiếng Việt ghi trạng thái bộ sạc là “Không” / “Có” (đã có trong `CHARGING_WORDS`). Còn chờ xác nhận lúc cắm sạc thật.
 
 ## App Android
 
