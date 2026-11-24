@@ -151,6 +151,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.13.2 | 24/11/2026 | Sửa bản đồ trắng trên iPhone đời cũ / Android (lọc màu từng ô thay vì cả lớp, dự phòng Leaflet từ jsDelivr, bỏ `inset`). Bảng danh sách dễ vuốt xuống hơn |
 | 1.13.1 | 24/11/2026 | Link phím tắt chung mới (có trạng thái bộ sạc, mẫu mới). iPhone ghi trạng thái sạc là “Có”/“Không” |
 | 1.13.0 | 24/11/2026 | Phím tắt iPhone: **đã về / đã rời** cho người dùng phím tắt (máy đang mở app ghi giúp, giờ = lúc phím tắt gửi, không ghi trùng); **⚡ Đang sạc** trong thẻ chi tiết từ lúc cắm đến lúc rút sạc, tự tắt sau 2 giờ không ai báo lại (app cũng gửi `chargingAt`); mẫu phím tắt mới xoá sai số GPS cũ. Rules: `charging` nhận chuỗi, thêm `chargingAt` |
 | 1.12.5 | 24/11/2026 | Web trên Android: Cài đặt hiện nút **🤖 Cài app Android** thay cho nút Phím tắt iPhone. Hộp thoại Phím tắt: khi đã có link chung thì chỉ hiện mã (ẩn mẫu chỉ dùng khi tự tạo) |

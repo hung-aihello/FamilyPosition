@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.13.1";
+const APP_VERSION = "1.13.2";
 const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 const STORE_KEY = "nhaminh.v1";
@@ -742,6 +742,9 @@ function initMap() {
   map.on("zoomend", () => renderMarkers()); // tách các ghim chồng lên nhau theo mức zoom
   map.on("click", () => { if (selectedId && !placing) closeDetail(); });
   map.on("move", () => { if (placing) updatePreview(); });
+  // Khung bản đồ đổi cỡ (thanh địa chỉ co/giãn, xoay máy, mở từ màn hình chính) mà Leaflet không biết
+  // → nó vẫn tưởng khung cũ (có khi 0×0) và không tải ô nào. Báo lại mỗi khi khung đổi cỡ.
+  new ResizeObserver(() => map.invalidateSize({ pan: false })).observe($("#map"));
 }
 
 function observeSheet() {
@@ -1856,7 +1859,10 @@ function bindSheetGestures() {
     if (!g) return false;
     const dy = y - g.y0;
     if (!g.dragging) {
-      if (Math.abs(dy) < 8) return false;
+      // Chưa đủ 8 px để quyết định, nhưng đã thấy vuốt xuống khi danh sách đang ở đầu: giữ lấy cử chỉ ngay.
+      // Nhường vài px đầu cho trình duyệt thì iPhone bắt đầu nảy/cuộn danh sách, sau đó không giành lại được nữa
+      // (lý do bảng trước đây rất khó vuốt xuống).
+      if (Math.abs(dy) < 8) return dy > 0 && Math.abs(x - g.x0) <= dy && (!g.inBody || body.scrollTop <= 0);
       if (Math.abs(x - g.x0) > Math.abs(dy)) { g = null; return false; } // vuốt ngang: bỏ qua
       if (g.inBody) {
         if (dy > 0 && body.scrollTop > 0) { g = null; return false; }    // đang cuộn dở → cuộn lên
@@ -1893,13 +1899,18 @@ function bindSheetGestures() {
     const snaps = [["peek", m.peek], ["half", m.half]];
     if (m.full) snaps.push(["full", m.full]);
     const nearest = (list, to) => list.reduce((best, s) => (Math.abs(s[1] - to) < Math.abs(best[1] - to) ? s : best));
+    // Hướng: hất (≥ 200 px/s) thì theo hướng hất; kéo chậm thì chỉ cần kéo được ~30 px là đủ sang nấc kế tiếp
+    // (trước đây phải kéo quá nửa đường giữa hai nấc, nên vuốt xuống nhẹ tay hay bị bật về chỗ cũ).
+    const moved = h - g0h; // > 0: kéo lên
+    const dir = Math.abs(v) > 0.2 ? -Math.sign(v) : Math.abs(moved) > 24 ? Math.sign(moved) : 0;
+    const ahead = snaps.filter(([, sh]) => (dir < 0 ? sh < g0h - 4 : sh > g0h + 4));
     let mode;
-    if (Math.abs(v) > 0.35) {
-      // Hất (≥ 350 px/s): sang nấc kế tiếp theo hướng tay, kể cả khi mới kéo được một đoạn ngắn
-      const ahead = snaps.filter(([, sh]) => (v > 0 ? sh < g0h - 4 : sh > g0h + 4));
-      [mode] = ahead.length ? nearest(ahead, g0h) : nearest(snaps, h);
+    if (dir && ahead.length) {
+      // Kéo chậm: nấc gần chỗ thả nhất trong các nấc phía trước. Hất: nấc đầu tiên còn ở phía trước chỗ thả.
+      const beyond = ahead.filter(([, sh]) => (dir < 0 ? sh <= h + 4 : sh >= h - 4));
+      [mode] = nearest(Math.abs(v) > 0.2 && beyond.length ? beyond : ahead, h);
     } else {
-      [mode] = nearest(snaps, h - v * 220); // kéo chậm: nấc gần chỗ thả nhất (có tính quán tính)
+      [mode] = nearest(snaps, h);
     }
     if (mode !== sheetMode) { buzz(); sound.snap(SHEET_ORDER.indexOf(mode) > SHEET_ORDER.indexOf(sheetMode)); }
     setSheetMode(mode);

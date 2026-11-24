@@ -1,7 +1,7 @@
 // Network-first: luôn lấy bản mới nhất khi có mạng, dùng cache khi mất mạng.
 const CACHE = "nhaminh-v1";
 const SHELL = ["./", "index.html", "style.css", "app.js", "sound.js", "native.js", "config.js", "icon.svg", "manifest.webmanifest"];
-const CACHEABLE_HOSTS = ["cdnjs.cloudflare.com", "fonts.googleapis.com", "fonts.gstatic.com", "www.gstatic.com"];
+const CACHEABLE_HOSTS = ["cdnjs.cloudflare.com", "fonts.googleapis.com", "fonts.gstatic.com", "www.gstatic.com", "cdn.jsdelivr.net"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

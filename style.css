@@ -62,7 +62,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .muted { color: var(--text-muted); margin: 8px 0 0; }
 :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 
-.screen { position: fixed; inset: 0; }
+.screen { position: fixed; top: 0; right: 0; bottom: 0; left: 0; }
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -154,13 +154,15 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .tips li::before { content: "✓"; position: absolute; left: 16px; top: 13px; color: var(--primary); font-weight: 800; font-size: 19px; }
 
 /* ---------- Main / Map ---------- */
-#map { position: absolute; inset: 0; background: var(--surface-2); }
+#map { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: var(--surface-2); }
 .leaflet-container { font-family: inherit; }
 .leaflet-control-attribution { font-size: 10px; }
 /* Làm dịu màu bản đồ OSM để marker nổi bật hơn */
-.leaflet-tile-pane { filter: saturate(.55) contrast(.95) brightness(1.03); }
+/* Lọc màu từng ô (không lọc cả lớp .leaflet-tile-pane): lọc cả lớp bắt Safari vẽ một ảnh khổng lồ,
+   máy ít RAM (iPhone đời cũ, Android tầm trung) không vẽ nổi → bản đồ trắng trơn. */
+.leaflet-tile-pane .leaflet-tile { filter: saturate(.55) contrast(.95) brightness(1.03); }
 @media (prefers-color-scheme: dark) {
-  .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) saturate(.45) brightness(.85) contrast(.9); }
+  .leaflet-tile-pane .leaflet-tile { filter: invert(1) hue-rotate(180deg) saturate(.45) brightness(.85) contrast(.9); }
 }
 
 .topbar {
@@ -348,7 +350,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 
 /* Chế độ đặt địa điểm */
 #main.placing .sheet, #main.placing .map-fabs, #main.placing .topbar { display: none; }
-.place-editor { position: absolute; inset: 0; z-index: 650; pointer-events: none; }
+.place-editor { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 650; pointer-events: none; }
 .place-editor > * { pointer-events: auto; }
 .crosshair { position: absolute; left: 50%; top: 40%; pointer-events: none !important; transform: translate(-50%, -100%); }
 .crosshair-pin {
@@ -575,7 +577,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .pin-bubble { overflow: hidden; }
 /* Leaflet đặt "width: auto" cho mọi img trong lớp marker (độ ưu tiên cao hơn .avatar-img) → phải ghi đè rõ */
 .leaflet-container .leaflet-marker-pane .pin-bubble img.avatar-img {
-  position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; border-radius: 0; object-fit: cover;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; max-width: none; border-radius: 0; object-fit: cover;
 }
 .place-who span { overflow: hidden; }
 .claim-item .avatar, .hint-icon { overflow: hidden; }
@@ -602,11 +604,11 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .crop-box img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; pointer-events: none; }
 /* Che phần ngoài vòng tròn — đúng phần sẽ hiện trên avatar */
 .crop-box::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none;
   background: radial-gradient(circle closest-side, transparent 0 calc(100% - 1px), rgba(0,0,0,.55) 100%);
 }
 .crop-box::before {
-  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 1; pointer-events: none;
   border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(255,255,255,.85);
 }
 .crop-zoom { display: flex; align-items: center; gap: 12px; margin: 4px 4px 0; color: var(--text-muted); font-weight: 700; }
@@ -652,7 +654,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
     radial-gradient(500px 360px at 110% 105%, color-mix(in srgb, var(--sunny) 20%, transparent), transparent 70%),
     var(--bg);
 }
-.floaties { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.floaties { position: fixed; top: 0; right: 0; bottom: 0; left: 0; overflow: hidden; pointer-events: none; z-index: 0; }
 .floaties span {
   position: absolute; left: var(--x); bottom: -60px; font-size: 30px; opacity: .22;
   animation: floatUp var(--t) linear var(--d) infinite;
@@ -743,7 +745,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 #detailName { outline: none; }
 .avatar-lg { position: relative; }
 .avatar-lg.live::before {
-  content: ""; position: absolute; inset: -9px; border-radius: 50%;
+  content: ""; position: absolute; top: -9px; right: -9px; bottom: -9px; left: -9px; border-radius: 50%;
   background: conic-gradient(from 0deg, var(--primary), #a3e635, var(--sunny), #f472b6, var(--primary));
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
@@ -791,7 +793,7 @@ code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
 .live-toast .lt-emoji { font-size: 28px; animation: wiggle .8s ease .3s both; }
 
 /* Pháo hoa emoji */
-.fx { position: fixed; inset: 0; pointer-events: none; z-index: 2200; overflow: hidden; }
+.fx { position: fixed; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; z-index: 2200; overflow: hidden; }
 .fx span { position: absolute; left: 0; top: 0; font-size: 24px; will-change: transform, opacity; }
 
 /* ---------- Keyframes ---------- */
