@@ -3,9 +3,13 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.13.2";
+const APP_VERSION = "1.13.3";
 const APP_RELEASED = "24/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
+// Lỗi JS gần nhất: hiện ở dòng chẩn đoán cuối Cài đặt
+let lastJsError = "";
+addEventListener("error", (e) => { if (e.target?.classList?.contains("leaflet-tile")) return; lastJsError = String(e.message || e.target?.src || e.target?.href || "?").slice(0, 120); }, true);
+addEventListener("unhandledrejection", (e) => { lastJsError = String(e.reason?.message || e.reason).slice(0, 120); });
 const STORE_KEY = "nhaminh.v1";
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"; // bỏ các ký tự dễ nhầm: i l o 0 1
 const CODE_LEN = 10;
@@ -726,12 +730,50 @@ function refreshBattery() {
   native.batteryInfo().then((b) => { if (b) battery = b; }).catch(() => {});
 }
 
+// Nguồn ô bản đồ: OSM trước; mạng nào chặn/không tải được OSM thì tự đổi sang Esri (không cần key).
+const TILE_SOURCES = [
+  { name: "OSM", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' },
+  { name: "Esri", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+    maxZoom: 19, maxNativeZoom: 18, attribution: "Tiles &copy; Esri" },
+];
+// Số liệu chẩn đoán (hiện ở cuối Cài đặt): người nhà báo lỗi bản đồ thì chụp màn hình dòng này.
+const tileStats = { src: 0, ok: 0, err: 0, lastErr: "" };
+let tileLayer = null, tileWatch = 0;
+
+function addTiles(i) {
+  const s = TILE_SOURCES[i];
+  if (tileLayer) tileLayer.remove();
+  Object.assign(tileStats, { src: i, ok: 0, err: 0, lastErr: "" });
+  tileLayer = L.tileLayer(s.url, { maxZoom: s.maxZoom, maxNativeZoom: s.maxNativeZoom, attribution: s.attribution })
+    .on("tileload", () => { tileStats.ok++; })
+    .on("tileerror", (e) => {
+      tileStats.err++;
+      tileStats.lastErr = `${s.name} ${e.coords ? `${e.coords.z}/${e.coords.x}/${e.coords.y}` : ""}`;
+    })
+    .addTo(map);
+  // 10 giây mà không tải được ô nào → thử nguồn kế tiếp
+  clearTimeout(tileWatch);
+  tileWatch = setTimeout(() => {
+    if (tileStats.ok || i + 1 >= TILE_SOURCES.length) return;
+    addTiles(i + 1);
+    toast("Đổi sang máy chủ bản đồ dự phòng");
+  }, 10e3);
+}
+
+function mapDiag() {
+  if (!window.L) return "Bản đồ: không tải được Leaflet";
+  if (!map) return "Bản đồ: chưa mở";
+  const sz = map.getSize(), el = $("#map");
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches ? " · tối" : "";
+  return `Bản đồ: ${TILE_SOURCES[tileStats.src].name} · ${tileStats.ok} ô ✓ · ${tileStats.err} lỗi` +
+    `${tileStats.lastErr ? ` (${tileStats.lastErr})` : ""} · khung ${sz.x}×${sz.y}/${el.clientWidth}×${el.clientHeight}` +
+    ` · zoom ${map.getZoom()}${dark} · ${navigator.onLine ? "có mạng" : "mất mạng"}`;
+}
+
 function initMap() {
   map = L.map("map", { zoomControl: false, attributionControl: true }).setView([16.05, 106.5], 5);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  }).addTo(map);
+  addTiles(0);
   map.attributionControl.setPrefix(false);
   // Lớp dây nối ghim ↔ vị trí thật: ngay dưới lớp ghim (600) để dây không đè lên ghim/nhãn tên.
   const tetherPane = map.createPane("tethers");
@@ -2337,6 +2379,11 @@ function openSettings() {
   $("#wakeToggle").checked = !!state.wake;
   $("#sfxToggle").checked = state.sfx !== false;
   $("#musicToggle").checked = state.music !== false;
+  const ua = navigator.userAgent;
+  const os = ua.match(/(iPhone OS|CPU OS|Android) [\d._]+/)?.[0] || navigator.platform;
+  const how = native.isNative ? "app" : /Zalo/i.test(ua) ? "Zalo" : /FBAN|FBAV|Messenger/i.test(ua) ? "Messenger"
+    : matchMedia("(display-mode: standalone)").matches || navigator.standalone ? "màn hình chính" : "trình duyệt";
+  $("#mapDiag").textContent = `${mapDiag()} · ${os} · ${how}${lastJsError ? ` · lỗi: ${lastJsError}` : ""}`;
   $("#settingsDialog").showModal();
 }
 

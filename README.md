@@ -4,7 +4,7 @@ Webapp xem vị trí người thân trong gia đình theo thời gian thực. Ch
 
 - Frontend tĩnh: GitHub Pages
 - Dữ liệu realtime: Firebase Realtime Database (gói Spark miễn phí)
-- Bản đồ: Leaflet + OpenStreetMap (không cần API key)
+- Bản đồ: Leaflet + OpenStreetMap (không cần API key); không tải được OSM thì tự đổi sang Esri World Street Map
 
 ## Cách hoạt động
 
@@ -151,6 +151,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.13.3 | 24/11/2026 | Bản đồ tự đổi sang máy chủ dự phòng (Esri) nếu 10 giây không tải được ô OSM nào. Cuối Cài đặt có dòng chẩn đoán bản đồ (nguồn, số ô tải được/lỗi, cỡ khung, iOS/Android, mở bằng gì, lỗi JS gần nhất) để chụp gửi khi báo lỗi |
 | 1.13.2 | 24/11/2026 | Sửa bản đồ trắng trên iPhone đời cũ / Android (lọc màu từng ô thay vì cả lớp, dự phòng Leaflet từ jsDelivr, bỏ `inset`). Bảng danh sách dễ vuốt xuống hơn |
 | 1.13.1 | 24/11/2026 | Link phím tắt chung mới (có trạng thái bộ sạc, mẫu mới). iPhone ghi trạng thái sạc là “Có”/“Không” |
 | 1.13.0 | 24/11/2026 | Phím tắt iPhone: **đã về / đã rời** cho người dùng phím tắt (máy đang mở app ghi giúp, giờ = lúc phím tắt gửi, không ghi trùng); **⚡ Đang sạc** trong thẻ chi tiết từ lúc cắm đến lúc rút sạc, tự tắt sau 2 giờ không ai báo lại (app cũng gửi `chargingAt`); mẫu phím tắt mới xoá sai số GPS cũ. Rules: `charging` nhận chuỗi, thêm `chargingAt` |
