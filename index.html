@@ -208,6 +208,7 @@
               <p id="detailStatus" class="detail-status"></p>
             </div>
           </div>
+          <div id="detailMood" class="detail-mood" hidden></div>
           <ul id="detailFacts" class="facts"></ul>
           <div class="detail-actions">
             <a id="detailGo" class="btn btn-primary" target="_blank" rel="noopener">🧭 Chỉ đường</a>
@@ -558,6 +559,11 @@
       </div>
     </div>
   </section>
+
+  <!-- Bong bóng "đang làm gì": 6 hình nảy ra quanh ghim / nút 💭 -->
+  <dialog id="moodDialog" class="mood-dialog" aria-labelledby="moodTitle">
+    <div id="moodRing" class="mood-ring"></div>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <!-- Thông báo "Bố vừa về nhà" + hiệu ứng pháo hoa emoji -->

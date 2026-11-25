@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.14.2";
+const APP_VERSION = "1.15.0";
 const APP_RELEASED = "25/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 // Lỗi JS gần nhất: hiện ở dòng chẩn đoán cuối Cài đặt
@@ -37,6 +37,18 @@ const BATTERY_LAG = 30 * 60e3;  // vị trí mới hơn lần báo pin quá 30 p
 const FIX_STALE = 60e3;         // vừa quay lại app mà lần định vị trước đã quá 1 phút → chờ lần định vị mới
 const MOVING_SPEED = 1.5;       // m/s (~5 km/h) trở lên coi là đang di chuyển
 const WALK_SPEED = 2.5;         // m/s (~9 km/h) trở xuống coi là đi bộ
+// Bong bóng "đang làm gì". Khoá lưu trên server (rules: 2–10 chữ thường); thứ tự = theo chiều kim đồng hồ trong bảng chọn.
+// pick: chữ trong bảng chọn · text: chữ cả nhà thấy · ttl: tự tắt sau · bits: hạt bay quanh trên bản đồ
+const MOODS = {
+  go:     { emoji: "🛵", pick: "Đang về",  text: "Đang về",       ttl: 3 * 3600e3, bits: ["💨", "💨"] },
+  call:   { emoji: "📞", pick: "Gọi đi",   text: "Rảnh, gọi đi",  ttl: 1 * 3600e3, bits: ["🎵", "🎵"] },
+  hungry: { emoji: "😋", pick: "Đói rồi",  text: "Đói rồi",       ttl: 2 * 3600e3, bits: ["🍜", "🍗"] },
+  love:   { emoji: "🥰", pick: "Nhớ nhà",  text: "Nhớ cả nhà",    ttl: 3 * 3600e3, bits: ["❤️", "💛"] },
+  sleep:  { emoji: "😴", pick: "Đi ngủ",   text: "Đang ngủ",      ttl: 8 * 3600e3, bits: ["z", "z"] },
+  busy:   { emoji: "🤫", pick: "Đang bận", text: "Bận, đừng gọi", ttl: 2 * 3600e3, bits: [] },
+};
+const HEART_KEEP = 2 * 864e5;   // tim thả lúc mình vắng: quá 2 ngày thì thôi không báo
+const HEART_EVERY = 700;        // ms — chạm liên tục thì tim vẫn bay, nhưng chỉ ghi lên server thưa thôi
 const LIVE_TEXT = "Đang chia sẻ trực tiếp"; // đang mở app, hoặc app native đang chạy nền (trong danh sách hẹp chỗ: "Trực tiếp")
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -202,7 +214,7 @@ function setupDialogs() {
     d.addEventListener("click", (e) => {
       if (e.target === d || e.target.closest("[data-close]")) d.close();
     });
-    bindSwipeToClose(d);
+    if (!d.matches(".mood-dialog")) bindSwipeToClose(d);
     swoosh.observe(d, { attributes: true, attributeFilter: ["open"] });
   }
 }
@@ -473,7 +485,7 @@ function processLeaveQueue() {
   const done = (slot) => { unqueue(slot); saveState(); };
   return Promise.all((state.leaveQueue || []).map((slot) =>
     fb.remove(fb.ref(fb.db, memberPath(slot)))
-      .then(() => fb.remove(fb.ref(fb.db, `families/${slot.f}/photos/${slot.m}`)).catch(() => {}))
+      .then(() => Promise.all(["photos", "hearts"].map((k) => fb.remove(fb.ref(fb.db, `families/${slot.f}/${k}/${slot.m}`)).catch(() => {}))))
       .then(() => done(slot))
       .catch((e) => { if (isDenied(e)) done(slot); }) // bị cấm thì cũng không xoá được nữa → bỏ khỏi hàng đợi
   ));
@@ -596,6 +608,8 @@ let places = {};           // placeId -> { name, emoji, lat, lng, radius, by, at
 let placesLoaded = false;
 let events = [];           // dòng thời gian: [{ id, m, type: "arrive"|"leave", place, at }]
 const placeLayers = new Map(); // placeId -> { circle, marker, key }
+let hearts = {};           // người nhận -> { người thả: lúc thả }
+let heartsLoaded = false;
 let selectedId = null;     // đang xem thẻ chi tiết của ai
 let placing = null;        // đang đặt địa điểm: { id, emoji, name, radius, nameEdited }
 let previewCircle = null;
@@ -703,6 +717,8 @@ async function enterMain(opts = {}) {
       return onKicked();
     }
     render();
+    announceMoods();
+    if (firstLoad) { dropOldMood(); setTimeout(greetHearts, 1500); } // chờ ghim rơi xuống xong
     if (firstLoad && myPos) pushPosition(false); // GPS có trước dữ liệu nhóm → giờ mới gửi
     if (firstLoad) trackMyPlace();
     trackOthersPlaces();
@@ -718,6 +734,7 @@ async function enterMain(opts = {}) {
     trackOthersPlaces();
     render();
   });
+  fb.onValue(famRef("hearts"), (s) => { hearts = s.val() || {}; onHearts(); render(); });
   // Dòng thời gian: chỉ tải 2 ngày gần nhất (hiển thị "Hôm nay").
   fb.onValue(fb.query(famRef("events"), fb.orderByChild("at"), fb.startAt(Date.now() - 2 * 864e5)), (s) => {
     events = [];
@@ -758,8 +775,14 @@ async function enterMain(opts = {}) {
       if (state.wake) requestWakeLock();
       updateStatus();
       render();
+      greetHearts();
     }
   };
+  if (!welcome && !state.moodUsed && !state.moodHint) {
+    state.moodHint = true;
+    saveState();
+    setTimeout(() => toast("Mới: chạm nút 💭 cạnh tên bạn để khoe đang làm gì!", 5000), 2500);
+  }
   if (native.isNative) {
     native.onAppStateChange((active) => {
       if (active === appActive) return;
@@ -951,8 +974,23 @@ function focusOn(points, animate = true) {
   if (reducedMotion()) animate = false;
   // Xem một người mà đang phóng to hơn mức 16 thì giữ nguyên, đừng thu nhỏ lại.
   const opts = { ...mapPadding(), maxZoom: points.length === 1 ? Math.max(16, map.getZoom()) : 16, animate };
+  if (points.length > 1) makeRoomForPins(bounds, opts);
   if (animate) map.flyToBounds(bounds, { ...opts, duration: 0.8 });
   else map.fitBounds(bounds, opts);
+}
+
+// Mấy người ở cùng chỗ thì ghim bị đẩy dạt ra hai bên: nới lề đúng phần bị đẩy, không thì ghim ở mép văng khỏi màn hình.
+function makeRoomForPins(bounds, opts) {
+  const { paddingTopLeft: tl, paddingBottomRight: br } = opts, size = map.getSize();
+  const zoom = Math.min(opts.maxZoom, map.getBoundsZoom(bounds, false, L.point(tl).add(br)));
+  if (!Number.isFinite(zoom)) return;
+  const located = locatedMembers(), off = layoutPins(located, zoom);
+  const xs = located.map((m) => map.project([m.lat, m.lng], zoom).x);
+  const pushed = located.map((m, i) => xs[i] + off.get(m.id).x);
+  const left = Math.max(0, Math.min(...xs) - Math.min(...pushed)), right = Math.max(0, Math.max(...pushed) - Math.max(...xs));
+  const k = Math.min(1, Math.max(0, size.x - tl[0] - br[0] - 40) / (left + right || 1)); // luôn chừa ít nhất 40 px
+  opts.paddingTopLeft = [tl[0] + left * k, tl[1]];
+  opts.paddingBottomRight = [br[0] + right * k, br[1]];
 }
 
 // Dữ liệu từ server + bản ghi của chính mình lấy từ máy (để vẫn hiện "Tôi" khi mạng chậm/mất).
@@ -1070,21 +1108,24 @@ let liveBusy = false;
 // Trả về true nếu đã hiện.
 function showLive(e) {
   const m = members[e.m], pl = places[e.place];
-  if (!m?.name || !pl) return false;
+  const mood = e.type === "mood" ? moodOf(m) : null;
+  if (!m?.name || (e.type === "mood" ? mood?.at !== e.at : !pl)) return false;
   if (liveBusy) { if (liveQueue.length < 5) liveQueue.push(e); return false; }
   liveBusy = true;
-  const home = pl.emoji === "🏠";
+  const home = pl?.emoji === "🏠";
   const verb = e.type === "leave" ? "vừa rời" : home ? "đã về đến" : "vừa đến";
   const box = $("#liveToast");
   box.innerHTML = `${avatarHtml(m, e.m)}
-    <span class="lt-text"><strong>${escapeHtml(m.name)}</strong> ${verb} <strong>${escapeHtml(`${pl.emoji || "📍"} ${pl.name}`)}</strong>
+    <span class="lt-text"><strong>${escapeHtml(m.name)}</strong>${mood ? `: ${escapeHtml(moodText(mood, m))}` : ` ${verb} <strong>${escapeHtml(`${pl.emoji || "📍"} ${pl.name}`)}</strong>`}
       <small>${escapeHtml(clockTime(e.at || Date.now()))}</small></span>
-    <span class="lt-emoji" aria-hidden="true">${e.type === "leave" ? "👋" : home ? "🏡" : "🎉"}</span>`;
+    <span class="lt-emoji" aria-hidden="true">${mood ? mood.emoji : e.type === "leave" ? "👋" : home ? "🏡" : "🎉"}</span>`;
   box.classList.remove("out");
   box.hidden = false;
   bringToFront(box);
   buzz([30, 60, 30]);
-  if (e.type === "arrive") sound.arrive(home); else sound.leave();
+  if (mood) sound.mood(mood.key); else if (e.type === "arrive") sound.arrive(home); else sound.leave();
+  const at = mood && pinPoint(e.m);
+  if (at) burst(at.x, at.y, moodSparks(mood), 10);
   if (e.type === "arrive") {
     requestAnimationFrame(() => {
       const r = box.getBoundingClientRect();
@@ -1153,6 +1194,216 @@ const placeLabel = (pl) => `${pl.emoji || "📍"} Ở ${pl.name}${pl.since ? ` t
 const avatarHtml = (m, id, cls = "") =>
   `<span class="avatar ${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")}">${avatarInner(m, id)}</span>`;
 
+/* ---- Bong bóng "đang làm gì" + thả tim ---- */
+// members/{id}/mood + moodAt: tự hết hạn khi hiển thị, không cần ai dọn. hearts/{người nhận}/{người thả} = lúc thả.
+
+// Bong bóng đang hiện của một người, hoặc null (không có / hết hạn / "Đang về" mà đã ở Nhà).
+function moodOf(m) {
+  const d = m && Object.hasOwn(MOODS, m.mood) && typeof m.moodAt === "number" ? MOODS[m.mood] : null;
+  if (!d || now() - m.moodAt > d.ttl) return null;
+  if (m.mood === "go" && memberPlace(m)?.emoji === "🏠") return null;
+  return { key: m.mood, at: m.moodAt, ...d };
+}
+
+// Về tới Nhà thì tắt hẳn "Đang về" (không thì lát nữa ra khỏi nhà nó lại hiện).
+const homeClears = (m, placeId) => (m.mood === "go" && places[placeId]?.emoji === "🏠" ? { mood: null, moodAt: null } : {});
+
+// "Đang về": còn bao xa tới Nhà gần nhất (đường chim bay), hoặc null nếu không biết.
+function homeDistance(mood, m) {
+  if (mood.key !== "go" || m.sharing === false || typeof m.lat !== "number") return null;
+  const ds = Object.values(places).filter((p) => p.emoji === "🏠").map((p) => distanceMeters(m, p));
+  return ds.length ? formatDistance(Math.min(...ds)) : null;
+}
+function moodText(mood, m) {
+  const km = homeDistance(mood, m);
+  return km ? `${mood.text} · còn ${km}` : mood.text;
+}
+
+// Ai đã thả tim cho bong bóng đang hiện (tim của bong bóng trước không tính).
+const heartsOn = (id, mood) => Object.entries(hearts[id] || {})
+  .filter(([from, at]) => from !== id && at >= mood.at && members[from]?.name).map(([from]) => from);
+
+function moodBubble(mood, m, withKm) {
+  const n = heartsOn(m.id, mood).length;
+  return `<div class="pin-mood mood-${mood.key}"><span class="mood-e">${mood.emoji}</span>${withKm ? '<span class="mood-km"></span>' : ""}${
+    mood.bits.map((b, i) => `<i class="bit b${i}">${b}</i>`).join("")}${n ? `<b class="mood-hearts">❤️${n > 1 ? n : ""}</b>` : ""}</div>`;
+}
+
+const joinNames = (list) => (list.length < 2 ? list.join("") : `${list.slice(0, -1).join(", ")} và ${list[list.length - 1]}`);
+function renderDetailMood(id, m, isMe) {
+  const box = $("#detailMood"), mood = moodOf(m);
+  box.hidden = !mood && !isMe;
+  if (box.hidden) return;
+  const from = mood ? heartsOn(id, mood) : [];
+  const who = from.map((f) => (f === state.memberId ? "Bạn" : members[f].name));
+  const liked = from.includes(state.memberId);
+  box.classList.toggle("on", !!mood);
+  const line = mood ? `<span class="dm-emoji" aria-hidden="true">${mood.emoji}</span><span class="dm-text"><strong>${escapeHtml(moodText(mood, m))}</strong>
+    <small>${escapeHtml(who.length ? `❤️ ${joinNames(who)}` : `từ ${clockTime(mood.at)}`)}</small></span>` : "";
+  setHtml(box, line + (isMe
+    ? `<button class="btn btn-secondary${mood ? " btn-sm" : ""}" type="button" aria-haspopup="dialog">${mood ? "Đổi" : "💭 Bạn đang làm gì?"}</button>`
+    : `<button class="heart-btn" type="button" aria-label="${escapeHtml(`Thả tim cho ${m.name}`)}">${liked ? "❤️" : "🤍"}</button>`));
+}
+
+const centerOf = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+// Chỗ của một người trên màn hình (bong bóng, không có thì ảnh); null nếu bị bảng che / nằm ngoài màn hình.
+function pinPoint(id, part = ".pin-mood") {
+  const el = markers.get(id)?.marker.getElement();
+  const at = el && (el.querySelector(part) || el.querySelector(".pin-bubble"));
+  if (!at) return null;
+  const p = centerOf(at), s = $("#sheet").getBoundingClientRect();
+  const covered = p.x > s.left && p.x < s.right && p.y > s.top && p.y < s.bottom;
+  return !covered && p.x > 0 && p.x < innerWidth && p.y > 0 && p.y < innerHeight ? p : null;
+}
+
+/* Bảng chọn: 6 hình nảy ra quanh ghim (hoặc quanh nút 💭). Chạm một hình là xong, chạm lại hình đang bật là tắt. */
+let moodAnchor = null;
+function openMoodPicker(at) {
+  const d = $("#moodDialog");
+  if (d.open || kicked || placing || !membersLoaded) return;
+  buzz();
+  const me = allMembers()[state.memberId], mood = moodOf(me), hint = suggestMood(me);
+  moodAnchor = at || { x: innerWidth / 2, y: innerHeight / 2 };
+  const n = Object.keys(MOODS).length;
+  $("#moodRing").innerHTML = `<div class="mood-center">${avatarHtml(me, state.memberId)}<span id="moodTitle">Bạn đang…</span></div>`
+    + Object.entries(MOODS).map(([key, o], i) => {
+      const a = (i / n) * 2 * Math.PI - Math.PI / 2, on = mood?.key === key;
+      return `<button class="mood-opt${on ? " on" : !mood && key === hint ? " hint" : ""}" type="button" data-mood="${key}" aria-pressed="${on}"
+        style="--cx:${Math.cos(a).toFixed(3)};--cy:${Math.sin(a).toFixed(3)};--i:${i}"><span class="mood-e" aria-hidden="true">${o.emoji}</span><span>${on ? "Tắt" : escapeHtml(o.pick)}</span></button>`;
+    }).join("");
+  $("#toast").classList.remove("show"); // thông báo cũ khỏi che bảng chọn
+  d.showModal();
+  placeMoodPicker();
+}
+// Vòng tròn mở ngay tại chỗ chạm, nhích vào trong cho đủ chỗ 6 nút.
+function placeMoodPicker() {
+  const fit = (v, half, size) => (size < half * 2 ? size / 2 : Math.max(half, Math.min(size - half, v)));
+  const ring = $("#moodRing");
+  ring.style.left = `${fit(moodAnchor.x, 146, innerWidth)}px`;
+  ring.style.top = `${fit(moodAnchor.y, 164, innerHeight)}px`;
+}
+
+// Hình hợp hoàn cảnh nhất lúc này → phóng to cho dễ chạm.
+function suggestMood(me) {
+  const pl = memberPlace(me), home = pl?.emoji === "🏠", h = new Date().getHours();
+  const canGo = !home && me.sharing !== false && Object.values(places).some((p) => p.emoji === "🏠");
+  if (canGo && !pl && movingText(me, state.memberId)) return "go";
+  if (h >= 22 || h < 5) return "sleep";
+  if (canGo && h >= 16 && h < 21) return "go";
+  if (h === 11 || h === 12 || h === 17 || h === 18) return "hungry";
+  if (pl && ["🏫", "🏢"].includes(pl.emoji)) return "busy";
+  return "love";
+}
+
+function pickMood(key, btn) {
+  const me = allMembers()[state.memberId], cur = moodOf(me), o = MOODS[key];
+  if (key === "go" && memberPlace(me)?.emoji === "🏠") {
+    playOnce(btn.firstElementChild, "shake", 0, 500);
+    sound.warn();
+    return toast("Bạn đang ở Nhà rồi mà 😄");
+  }
+  const at = pinPoint(state.memberId) || centerOf(btn);
+  $("#moodDialog").close();
+  state.moodUsed = true;
+  saveState();
+  buzz([15, 40, 25]);
+  if (cur?.key === key) {
+    sound.back();
+    meWrite({ mood: null, moodAt: null }).catch(onWriteError);
+    return toast("Đã tắt bong bóng");
+  }
+  meWrite({ mood: key, moodAt: fb.serverTimestamp() }).catch(onWriteError);
+  sound.mood(key);
+  burst(at.x, at.y, moodSparks(o), 14);
+  toast(`${o.emoji} Cả nhà sẽ thấy: ${o.text}`);
+}
+const moodSparks = (o) => [o.emoji, ...o.bits.filter((b) => b !== "z"), "✨"];
+
+// Bong bóng đã hết hạn thì xoá khỏi server luôn (lúc mở app).
+function dropOldMood() {
+  const me = members[state.memberId];
+  if (me?.mood && typeof me.moodAt === "number" && now() - me.moodAt > 24 * 3600e3) meWrite({ mood: null, moodAt: null }).catch(() => {});
+}
+
+// Người khác vừa đổi bong bóng trong lúc mình đang mở app → báo + ghim toé ra.
+const seenMoods = new Map();
+let moodsPrimed = false;
+function announceMoods() {
+  for (const [id, m] of Object.entries(members)) {
+    const was = seenMoods.get(id) || 0, mood = moodOf(m);
+    if (!mood || mood.at <= was) continue;
+    seenMoods.set(id, mood.at);
+    if (moodsPrimed && id !== state.memberId && m.name && now() - mood.at < 5 * 60e3 && appVisible()) showLive({ type: "mood", m: id, at: mood.at });
+  }
+  moodsPrimed = true;
+}
+
+/* ---- Thả tim ---- */
+const heartSent = new Map(); // người nhận -> lần ghi gần nhất
+function sendHeart(to, from) {
+  const m = members[to];
+  if (!m || !moodOf(m) || kicked) return;
+  buzz(12);
+  sound.heart();
+  flyHeart(from || pinPoint(state.memberId), pinPoint(to));
+  if (Date.now() - (heartSent.get(to) || 0) < HEART_EVERY) return;
+  heartSent.set(to, Date.now());
+  famWrite(`hearts/${to}`, { [state.memberId]: fb.serverTimestamp() }).catch(onWriteError);
+}
+
+// ❤️ bay theo đường cong từ a tới b, tới nơi thì toé ra. Không thấy chỗ xuất phát thì toé luôn tại b.
+function flyHeart(a, b) {
+  if (reducedMotion() || !(a || b)) return;
+  const end = b || a;
+  const land = () => burst(end.x, end.y, ["❤️", "💛", "💕"], 8);
+  const dist = a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  if (dist < 30) return land();
+  const el = document.createElement("span");
+  el.textContent = "❤️";
+  el.style.fontSize = "30px";
+  $("#fx").appendChild(el);
+  const lift = Math.min(160, 50 + dist / 3), frames = [];
+  for (let i = 0; i <= 12; i++) {
+    const k = i / 12, x = a.x + (b.x - a.x) * k - 15, y = a.y + (b.y - a.y) * k - Math.sin(k * Math.PI) * lift - 18;
+    frames.push({ transform: `translate(${x}px, ${y}px) scale(${(0.7 + Math.sin(k * Math.PI) * 0.8).toFixed(2)}) rotate(${Math.round(Math.sin(k * 9) * 14)}deg)` });
+  }
+  el.animate(frames, { duration: 850, easing: "cubic-bezier(.4,0,.5,1)" }).finished.then(() => { el.remove(); land(); }, () => el.remove());
+}
+
+// Người trong nhà thả tim cho nhau lúc mình đang xem: tim bay trên bản đồ. Tim cho mình: greetHearts().
+const seenHearts = new Map();
+function onHearts() {
+  for (const [to, list] of Object.entries(hearts)) {
+    for (const [from, at] of Object.entries(list || {})) {
+      const key = `${to}/${from}`, was = seenHearts.get(key) || 0;
+      seenHearts.set(key, at);
+      if (heartsLoaded && at > was && to !== state.memberId && from !== state.memberId && now() - at < 60e3 && appVisible()) {
+        const a = pinPoint(from), b = pinPoint(to);
+        if (b) flyHeart(a, b);
+      }
+    }
+  }
+  const first = !heartsLoaded;
+  heartsLoaded = true;
+  if (!first) greetHearts(); // lần tải đầu: enterMain gọi sau khi ghim đã rơi xuống
+}
+
+// Tim cho mình mà mình chưa thấy — vừa thả, hoặc thả lúc mình không mở app.
+function greetHearts() {
+  if (!membersLoaded || !heartsLoaded || !appVisible() || kicked) return;
+  const since = Math.max(state.heartSeen || 0, now() - HEART_KEEP);
+  const mine = Object.entries(hearts[state.memberId] || {})
+    .filter(([f, at]) => f !== state.memberId && at > since && members[f]?.name).sort((a, b) => b[1] - a[1]);
+  if (!mine.length) return;
+  state.heartSeen = mine[0][1];
+  saveState();
+  if (mine.length === 1 && now() - mine[0][1] < 15e3) flyHeart(pinPoint(mine[0][0]), pinPoint(state.memberId));
+  else burst(innerWidth / 2, 60, ["❤️", "💕", "💛"], 30, true);
+  buzz([20, 50, 20]);
+  sound.heart(true);
+  toast(`❤️ ${joinNames(mine.map(([f]) => members[f].name))} thả tim cho bạn`, 4000);
+}
+
 /* ---- Ghim trên bản đồ ---- */
 
 function renderMarkers() {
@@ -1166,10 +1417,11 @@ function renderMarkers() {
     const isMe = m.id === state.memberId;
     const stale = !isMe && now() - (m.updatedAt || 0) > IDLE_WINDOW;
     const live = !isMe && memberStatus(m, m.id) === "on";
+    const mood = moodOf(m), km = mood && homeDistance(mood, m);
     const cls = `pin${isMe ? " me" : ""}${live ? " live" : ""}${stale ? " stale" : ""}${selectedId === m.id ? " selected" : ""}`;
     const html = `<div class="${cls}" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
       <div class="pin-bubble">${avatarInner(m, m.id)}</div>
-      <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div></div>`;
+      <div class="pin-label">${escapeHtml(isMe ? "Tôi" : m.name)}</div>${mood ? moodBubble(mood, m, !!km) : ""}</div>`;
     // Dây nối nằm ở lớp riêng dưới mọi ghim, để không vắt ngang nhãn tên của người khác.
     const tetherHtml = `<div class="pin-tether" style="--c:${escapeHtml(m.color || "#ccfbf1")}"></div>`;
     const tetherIcon = () => L.divIcon({ html: tetherHtml, className: "", iconSize: [0, 0], iconAnchor: [0, 0] });
@@ -1179,7 +1431,13 @@ function renderMarkers() {
         icon: L.divIcon({ html, className: "", iconSize: [56, 66], iconAnchor: [28, 66] }),
         keyboard: true, title: m.name, zIndexOffset: isMe ? 1000 : 0,
       }).addTo(map);
-      marker.on("click", (e) => { L.DomEvent.stopPropagation(e); openDetail(m.id); });
+      marker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (m.id === state.memberId) openMoodPicker(pinPoint(m.id, ".pin-bubble"));
+        else if (e.originalEvent?.target?.closest?.(".pin-mood")) sendHeart(m.id);
+        else openDetail(m.id);
+      });
+      marker.on("dblclick", () => {}); // thả tim liên tục: đừng để bản đồ hiểu là chạm đúp để phóng to
       const tether = L.marker([m.lat, m.lng], { icon: tetherIcon(), pane: "tethers", interactive: false, keyboard: false }).addTo(map);
       entry = { marker, tether, html, tetherHtml, target: [m.lat, m.lng] };
       markers.set(m.id, entry);
@@ -1195,6 +1453,9 @@ function renderMarkers() {
       if (entry.tetherHtml !== tetherHtml) { entry.tether.setIcon(tetherIcon()); entry.tetherHtml = tetherHtml; }
     }
     applyPinOffset(entry, offsets.get(m.id));
+    // Số km đổi liên tục: chỉ thay chữ, không dựng lại ghim (hiệu ứng khỏi chạy lại từ đầu)
+    const kmEl = km && entry.marker.getElement()?.querySelector(".mood-km");
+    if (kmEl && kmEl.textContent !== km) kmEl.textContent = km;
   }
   for (const [id, entry] of markers) {
     if (!seen.has(id)) { cancelAnimationFrame(entry.raf); entry.marker.remove(); entry.tether.remove(); markers.delete(id); }
@@ -1216,7 +1477,7 @@ function renderMarkers() {
 }
 
 /* ---- Chống chồng chữ/ghim trên bản đồ ---- */
-const PIN_W = 56, PIN_H = 66, PIN_LABEL_H = 26, PIN_GAP = 6;
+const PIN_W = 56, PIN_H = 66, PIN_LABEL_H = 26, PIN_GAP = 6, PIN_MOOD_H = 40, PIN_KM_W = 104;
 const labelWidth = (text) => Math.min(110, Math.round(String(text).length * 7.6) + 20);
 const boxesHit = (a, b) => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
 let pinBoxes = []; // khung chiếm chỗ của từng ghim (toạ độ màn hình), dùng để đặt nhãn địa điểm
@@ -1230,7 +1491,9 @@ function layoutPins(located, zoom) {
   const H = PIN_H + PIN_LABEL_H;
   const items = located.map((m) => {
     const p = zoom == null ? map.latLngToContainerPoint([m.lat, m.lng]) : map.project([m.lat, m.lng], zoom);
-    return { id: m.id, p, x: p.x, y: p.y, w: Math.max(PIN_W, labelWidth(m.id === state.memberId ? "Tôi" : m.name)) };
+    const mood = moodOf(m);
+    return { id: m.id, p, x: p.x, y: p.y, top: mood ? PIN_MOOD_H : 0, // bong bóng nhô lên trên ghim
+      w: Math.max(PIN_W, labelWidth(m.id === state.memberId ? "Tôi" : m.name), mood && homeDistance(mood, m) ? PIN_KM_W : 0) };
   }).sort((a, b) => a.id.localeCompare(b.id));
 
   // Gỡ chồng lấn từng cặp, lặp tới khi hết (cả nhà chỉ vài người nên rất nhẹ).
@@ -1240,7 +1503,7 @@ function layoutPins(located, zoom) {
       for (let j = i + 1; j < items.length; j++) {
         const a = items[i], b = items[j];
         const ox = (a.w + b.w) / 2 + PIN_GAP - Math.abs(b.x - a.x);
-        const oy = H + PIN_GAP - Math.abs(b.y - a.y);
+        const oy = H + PIN_GAP + (b.y > a.y ? b.top : a.top) - Math.abs(b.y - a.y); // top: phần nhô lên của ghim nằm dưới
         if (ox <= 0.5 || oy <= 0.5) continue;
         moved = true;
         // Tách theo trục chồng ít hơn; chiều đẩy theo vị trí thật (cùng chỗ thì xếp theo id, hàng ngang).
@@ -1261,7 +1524,7 @@ function layoutPins(located, zoom) {
   for (const it of items) {
     const d = { x: Math.round(it.x - it.p.x), y: Math.round(it.y - it.p.y) };
     off.set(it.id, d);
-    if (zoom == null) pinBoxes.push({ x1: it.x - it.w / 2, x2: it.x + it.w / 2, y1: it.y - PIN_H, y2: it.y + PIN_LABEL_H });
+    if (zoom == null) pinBoxes.push({ x1: it.x - it.w / 2, x2: it.x + it.w / 2, y1: it.y - PIN_H - it.top, y2: it.y + PIN_LABEL_H });
   }
   return off;
 }
@@ -1365,6 +1628,7 @@ function renderList() {
     const hasPos = m.sharing !== false && typeof m.lat === "number";
     const pl = hasPos ? memberPlace(m) : null;
     const moving = hasPos && !pl ? movingText(m, id) : null;
+    const mood = moodOf(m);
 
     const meta = []; // dòng phụ: các đoạn HTML đã escape
     const text = (s) => meta.push(escapeHtml(s));
@@ -1394,9 +1658,9 @@ function renderList() {
         </span>
         <span class="member-info">
           <span class="member-name${low ? " with-batt" : ""}"><span class="nm">${escapeHtml(m.name)}</span>${isMe ? ' <span class="me">(bạn)</span>' : low}</span>
-          <span class="member-meta">${tag ? `<span class="member-tag">${escapeHtml(tag)}</span>` : ""}<span class="member-sub">${meta.join(" · ")}</span></span>
+          <span class="member-meta">${mood ? `<span class="member-tag mood">${escapeHtml(`${mood.emoji} ${moodText(mood, m)}`)}</span>` : ""}${tag ? `<span class="member-tag">${escapeHtml(tag)}</span>` : ""}<span class="member-sub">${meta.join(" · ")}</span></span>
         </span>
-      </button>${isMe || !hasPos ? "" : `<a class="go-btn" href="${escapeHtml(directionsUrl(m))}" target="_blank" rel="noopener" aria-label="${escapeHtml(`Chỉ đường tới ${m.name}`)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8-8-2Z"/></svg></a>`}`;
+      </button>${isMe ? `<button class="mood-btn${mood ? " on" : ""}${state.moodUsed ? "" : " call"}" type="button" aria-haspopup="dialog" aria-label="${escapeHtml(mood ? `Bạn đang: ${mood.text}. Chạm để đổi` : "Bạn đang làm gì?")}">${mood ? mood.emoji : "💭"}</button>` : !hasPos ? "" : `<a class="go-btn" href="${escapeHtml(directionsUrl(m))}" target="_blank" rel="noopener" aria-label="${escapeHtml(`Chỉ đường tới ${m.name}`)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8-8-2Z"/></svg></a>`}`;
     let li = old.get(id);
     if (!li) {
       li = document.createElement("li");
@@ -1404,7 +1668,11 @@ function renderList() {
       li.className = listAnimated ? "member" : "member enter";
       li.style.setProperty("--i", String(rows.length));
       li.addEventListener("animationend", (e) => { if (e.target === li) li.classList.remove("enter"); });
-      li.addEventListener("click", (e) => { if (e.target.closest(".member-main")) openDetail(id); });
+      li.addEventListener("click", (e) => {
+        const btn = e.target.closest(".mood-btn");
+        if (btn) openMoodPicker(centerOf(btn));
+        else if (e.target.closest(".member-main")) openDetail(id);
+      });
     }
     if (li._html !== html) { li.innerHTML = html; li._html = html; }
     rows.push(li);
@@ -1520,6 +1788,8 @@ function renderDetail() {
   st.textContent = pl ? placeLabel(pl)
     : moving || (m.sharing === false ? "Đã tắt chia sẻ vị trí" : !hasPos ? "Chưa có vị trí" : status === "on" ? LIVE_TEXT : "Không ở địa điểm quen");
 
+  renderDetailMood(id, m, isMe);
+
   const facts = [];
   const fact = (icon, html, extra = "") => facts.push(`<li><span class="fi" aria-hidden="true">${icon}</span><span class="fv ${extra}">${html}</span></li>`);
   let addrKey = null;
@@ -1628,11 +1898,12 @@ function trackMyPlace() {
   const next = placeAt(myPos, was);
   if (next === was && (stored.place || null) === was) return;
 
-  meWrite({ place: next, placeSince: next ? fb.serverTimestamp() : null }).catch(onPosDenied);
+  const cleared = homeClears(stored, next);
+  meWrite({ place: next, placeSince: next ? fb.serverTimestamp() : null, ...cleared }).catch(onPosDenied);
   if (was && next !== was) logEvent("leave", was);
   if (next && next !== was) logEvent("arrive", next);
   // Cập nhật ngay trên máy để lần định vị kế tiếp không ghi trùng trước khi server phản hồi.
-  members[state.memberId] = { ...stored, place: next, placeSince: next ? now() : null };
+  members[state.memberId] = { ...stored, place: next, placeSince: next ? now() : null, ...cleared };
 }
 
 function logEvent(type, placeId, who = state.memberId, at = null) {
@@ -1658,10 +1929,10 @@ function trackOthersPlaces() {
     const next = placeAt(m, was);
     if (next === was && (m.place || null) === was) continue;
     const at = m.updatedAt; // giờ server lúc phím tắt gửi: máy nào tính cũng ra cùng khoá sự kiện
-    famWrite(`members/${id}`, { place: next, placeSince: next ? at : null }).catch(() => {});
+    famWrite(`members/${id}`, { place: next, placeSince: next ? at : null, ...homeClears(m, next) }).catch(() => {});
     if (was && next !== was) logEvent("leave", was, id, at);
     if (next && next !== was) logEvent("arrive", next, id, at);
-    members[id] = { ...m, place: next, placeSince: next ? at : null };
+    members[id] = { ...m, place: next, placeSince: next ? at : null, ...homeClears(m, next) };
   }
 }
 
@@ -2260,6 +2531,16 @@ function bindMainUi() {
   new ResizeObserver(keepTarget).observe($("#placePanel"));
 
   $("#detailBack").addEventListener("click", () => { buzz(); sound.back(); closeDetail(); if (sheetMode === "peek") setSheetMode("half"); });
+  $("#moodDialog").addEventListener("click", (e) => {
+    const b = e.target.closest(".mood-opt");
+    if (b) pickMood(b.dataset.mood, b);
+  });
+  addEventListener("resize", () => { if ($("#moodDialog").open) placeMoodPicker(); });
+  $("#detailMood").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || !selectedId) return;
+    if (selectedId === state.memberId) openMoodPicker(centerOf(b)); else sendHeart(selectedId, centerOf(b));
+  });
   $("#detailShare").addEventListener("click", () => selectedId && shareLocationOf(selectedId));
   $("#detailSavePlace").addEventListener("click", () => {
     const m = selectedId && allMembers()[selectedId];

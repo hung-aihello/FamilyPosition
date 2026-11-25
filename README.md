@@ -126,6 +126,23 @@ Chạm vào một người (trong danh sách hoặc trên bản đồ) để xem
 
 > Địa chỉ được tra từ OpenStreetMap (Nominatim) **chỉ khi mở thẻ chi tiết**, với toạ độ của người đang xem, có bộ nhớ đệm và giới hạn 1 lần / 15 giây.
 
+## Bong bóng “đang làm gì”
+Chạm **ghim của mình** trên bản đồ (hoặc nút **💭** cạnh tên mình) → chạm một hình. Hai chạm là xong, cả nhà thấy bong bóng trên ghim và trong danh sách. Chạm lại hình đang bật để tắt.
+
+| Hình | Cả nhà thấy | Tự tắt |
+|---|---|---|
+| 🛵 | Đang về · còn 3,2 km (đường chim bay tới 🏠 gần nhất) | Khi về tới Nhà, hoặc sau 3 giờ |
+| 📞 | Rảnh, gọi đi | 1 giờ |
+| 😋 | Đói rồi | 2 giờ |
+| 🥰 | Nhớ cả nhà | 3 giờ |
+| 😴 | Đang ngủ | 8 giờ |
+| 🤫 | Bận, đừng gọi | 2 giờ |
+
+- Hình hợp hoàn cảnh nhất được viền vàng (đang đi đường → 🛵, sau 22 giờ → 😴, giờ cơm → 😋…).
+- **Thả tim:** chạm bong bóng của người khác (hoặc nút 🤍 trong thẻ chi tiết) → ❤️ bay sang. Người đó đang mở app thì thấy ngay; chưa mở thì lần mở sau được báo “Mẹ và Bi thả tim cho bạn” (trong 2 ngày).
+- Người tắt chia sẻ vị trí vẫn đặt được, chỉ hiện trong danh sách. Không có thông báo đẩy: bong bóng và tim chỉ thấy khi mở app.
+- Người dùng Phím tắt iPhone: số km theo lần gửi vị trí gần nhất; về tới Nhà thì máy người khác đang mở app tắt 🛵 giúp.
+
 ## Ảnh đại diện
 **⚙️ Cài đặt → 📷 Chọn ảnh** → kéo/chụm 2 ngón để căn khuôn mặt vào vòng tròn → **Dùng ảnh này** → **Lưu**. Muốn quay lại hình emoji: **Dùng hình emoji** → **Lưu**.
 
@@ -153,6 +170,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.15.0 | 25/11/2026 | **Bong bóng “đang làm gì”**: chạm ghim của mình (hoặc nút 💭) → chọn 🛵 📞 😋 🥰 😴 🤫, tự tắt theo giờ, 🛵 hiện còn bao xa và tắt khi về tới Nhà. **Thả tim**: chạm bong bóng người khác, ❤️ bay sang; lúc vắng thì mở app được báo lại. Có tiếng riêng cho từng hình. “Xem cả nhà” không còn để ghim ở mép văng khỏi màn hình khi nhiều người cùng chỗ. **Cần deploy Rules mới** |
 | 1.14.2 | 25/11/2026 | Chạm vào một người: bảng mở cao vừa đúng để thấy hết nội dung, không kéo cao thêm được nữa (trước đây kéo lên lòi khoảng trắng). Vuốt xuống thì thu gọn còn ảnh + tên, chạm để mở lại. Hai nút Chỉ đường / Gửi vị trí nằm cùng hàng |
 | 1.14.1 | 25/11/2026 | Sửa: thông báo bị hộp thoại che (“Tên không được để trống”, “Đã sao chép ✓”…); tải lại trang giữa chừng mất lời mời; mấy người về cùng lúc chỉ báo một người; mạng hỏng thì kẹt ở màn hình chờ (giờ có nút **Thử lại**); chạm vào một người lúc bảng kéo lên hết thì không thấy người đó; thẻ chi tiết / dòng thời gian chớp mỗi lần GPS báo; điện thoại xoay ngang không đặt được địa điểm, bản đồ trống; màn hình hẹp mất nút ⚙️; dòng pin thấp bị cắt khoảng cách; vừa phát hành dễ bị lẫn file cũ. Cải thiện: nút **Lưu** trong Cài đặt luôn ở mép dưới, đóng mà quên Lưu thì nhắc; chạm cả dòng để gạt công tắc; đóng thẻ về đúng chỗ đang cuộn; báo “Mất mạng”; xem một người không bị thu nhỏ bản đồ |
 | 1.14.0 | 25/11/2026 | **Tắt chia sẻ là server từ chối luôn vị trí**, kể cả từ Phím tắt iPhone (cần deploy Rules mới); vị trí còn sót của người đã tắt chia sẻ được xoá giúp. **Đổi mã nhóm mang theo ảnh đại diện + địa điểm.** “Đang mở app” đổi thành “Đang chia sẻ trực tiếp”, trong danh sách là “Trực tiếp” (đúng cả khi app native chạy nền) |
@@ -209,9 +227,11 @@ families/{mã-nhóm}/members/{id-thiết-bị} = {
   name, emoji, color, sharing, online,
   lat, lng, acc, speed, battery, charging, updatedAt, joinedAt,
   place, placeSince,           // đang ở địa điểm nào, từ lúc nào
+  mood, moodAt,                // bong bóng “đang làm gì” (go, call, hungry, love, sleep, busy) và lúc đặt
   photo                        // số phiên bản ảnh đại diện (nếu có)
 }
 families/{mã-nhóm}/photos/{id-thiết-bị} = { data: "data:image/webp;base64,…", v }
+families/{mã-nhóm}/hearts/{người-nhận}/{người-thả} = lúc thả tim gần nhất
 families/{mã-nhóm}/places/{id} = { name, emoji, lat, lng, radius, by, at }
 families/{mã-nhóm}/events/{id} = { m, type: "arrive" | "leave", place, at }
 families/{mã-nhóm}/banned/{id-thiết-bị} = true   // chỉ admin ghi

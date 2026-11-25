@@ -219,6 +219,24 @@ export const sound = {
   },
   // Người thân rời đi: hai nốt đi xuống, "tạm biệt".
   leave() { play((t) => { bell(sfxBus, 84, t, 0.15, 1); bell(sfxBus, 79, t + 0.16, 0.15, 1.4); }); },
+  // Bong bóng "đang làm gì": mỗi hình một tiếng riêng.
+  mood(key) {
+    play((t) => {
+      if (key === "go") [0, 0.16].forEach((d) => { tone(sfxBus, 440, t + d, 0.11, 0.1, { type: "triangle" }); tone(sfxBus, 554, t + d, 0.11, 0.08, { type: "triangle" }); }); // "bíp bíp"
+      else if (key === "call") [0, 0.09, 0.18, 0.42, 0.51, 0.6].forEach((d, i) => bell(sfxBus, i % 2 ? 88 : 91, t + d, 0.12, 0.35)); // reng reng
+      else if (key === "hungry") [0, 0.1, 0.2].forEach((d, i) => pop(300 + i * 130, t + d, 0.18, 0.12)); // măm măm
+      else if (key === "sleep") [84, 81, 77, 72].forEach((m, i) => bell(sfxBus, m, t + i * 0.2, 0.12, 1.6)); // hát ru
+      else if (key === "busy") swish(t, false, 0.16, 0.5); // "suỵt"
+      else { [81, 84, 89].forEach((m, i) => bell(sfxBus, m, t + i * 0.09, 0.16, 1.2)); sparkle(t + 0.3, 5, 0.06); }
+    });
+  },
+  // Thả tim / nhận được tim.
+  heart(got = false) {
+    play((t) => {
+      pop(760, t, 0.14); pop(1010, t + 0.09, 0.14);
+      if (got) { [84, 88, 91, 96].forEach((m, i) => bell(sfxBus, m, t + 0.15 + i * 0.08, 0.15, 1.1)); sparkle(t + 0.5, 6, 0.06); }
+    });
+  },
   // Lưu xong (địa điểm, cài đặt, ảnh…).
   success(big = false) {
     play((t) => {

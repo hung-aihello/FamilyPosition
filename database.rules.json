@@ -23,6 +23,8 @@
             "chargingAt": { ".validate": "newData.isNumber() && newData.val() <= now" },
             "place":      { ".validate": "newData.isString() && newData.val().matches(/^[a-z0-9]{10}$/) && newData.parent().child('sharing').val() !== false" },
             "placeSince": { ".validate": "newData.isNumber() && newData.val() <= now" },
+            "mood":       { ".validate": "newData.isString() && newData.val().matches(/^[a-z]{2,10}$/)" },
+            "moodAt":     { ".validate": "newData.isNumber() && newData.val() <= now" },
             "updatedAt":  { ".validate": "newData.isNumber() && newData.val() <= now" },
             "joinedAt":   { ".validate": "newData.isNumber() && newData.val() <= now" },
             "photo":      { ".validate": "newData.isNumber()" },
@@ -36,6 +38,15 @@
             "data":   { ".validate": "newData.isString() && newData.val().length <= 60000 && (newData.val().beginsWith('data:image/webp;base64,') || newData.val().beginsWith('data:image/jpeg;base64,') || newData.val().beginsWith('data:image/png;base64,'))" },
             "v":      { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
+          }
+        },
+        "hearts": {
+          "$to": {
+            ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $to.matches(/^[a-z0-9]{16}$/) && !newData.exists()",
+            "$from": {
+              ".write": "$familyId.matches(/^[a-hjkmnp-z2-9]{10}$/) && $to.matches(/^[a-z0-9]{16}$/) && $from.matches(/^[a-z0-9]{16}$/) && !root.child('families').child($familyId).child('banned').child($from).exists()",
+              ".validate": "newData.isNumber() && newData.val() <= now && $from !== $to && root.child('families').child($familyId).child('members').child($to).exists() && root.child('families').child($familyId).child('members').child($from).exists()"
+            }
           }
         },
         "places": {
