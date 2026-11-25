@@ -911,6 +911,21 @@ label.switch-row { cursor: pointer; }
   position: sticky; bottom: 0; z-index: 2; margin: 0 -20px; padding: 20px 20px calc(10px + var(--safe-bottom));
   background: linear-gradient(transparent, var(--surface) 16px);
 }
+#sheetHome, #memberDetail { display: flow-root; } /* đo chiều cao nội dung cho đúng, kể cả lề */
+/* Nút trong thẻ chi tiết: hai nút chính cùng hàng cho thẻ gọn lại, chừa chỗ cho bản đồ */
+.detail-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.detail-actions .btn { flex: 1 1 120px; width: auto; padding: 12px 10px; white-space: nowrap; }
+.detail-actions .btn + .btn { margin-top: 0; }
+.detail-actions .btn-ghost { flex-basis: 100%; }
+@media (max-width: 719px) {
+  /* Đang xem một người: bảng cao vừa đúng thẻ, phần tiêu đề "Cả nhà" nhường chỗ */
+  .sheet.detail-open { max-height: var(--sheet-max, 80vh); }
+  .sheet.detail-open.moving { max-height: none; }
+  .sheet.detail-open .greeting, .sheet.detail-open .sheet-title, .sheet.detail-open .chip-btn { display: none; }
+  .sheet.detail-open .sheet-handle { padding-bottom: 2px; }
+  .sheet.detail-open.collapsed .sheet-body { opacity: 1; overflow: hidden; }
+  .sheet.detail-open.collapsed :is(.facts, .detail-actions) { visibility: hidden; }
+}
 .splash-error { margin-top: 18px; max-width: 300px; }
 .splash-error p { margin: 0 0 14px; color: var(--text-muted); }
 @media (prefers-color-scheme: dark) {

@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.14.1";
+const APP_VERSION = "1.14.2";
 const APP_RELEASED = "25/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 // Lỗi JS gần nhất: hiện ở dòng chẩn đoán cuối Cài đặt
@@ -925,7 +925,7 @@ function observeSheet() {
     $("#main").style.setProperty("--sheet-h", `${h}px`);
     // Bảng kéo lên gần hết màn hình → không còn chỗ cho 2 nút nổi: ẩn đi thay vì để đè lên thanh trên cùng
     const room = innerHeight - h - $(".topbar").getBoundingClientRect().bottom;
-    $("#main").classList.toggle("fabs-hidden", !isDesktop() && room < 140);
+    $("#main").classList.toggle("fabs-hidden", !isDesktop() && room < 224);
   };
   new ResizeObserver(apply).observe(sheet);
   addEventListener("resize", apply);
@@ -1460,10 +1460,12 @@ function openDetail(id) {
   buzz();
   sound.select();
   if (!selectedId) homeScroll = $("#sheetBody").scrollTop;
+  const from = $("#sheet").getBoundingClientRect().height;
   selectedId = id;
+  $("#sheet").classList.add("detail-open");
   renderDetail();
   if (!selectedId) return; // người này vừa rời nhóm
-  if (sheetMode !== "half") setSheetMode("half"); // thu gọn: mở ra xem thẻ; full: hạ xuống để thấy người đó trên bản đồ
+  setSheetMode("half", true, from); // bảng cao vừa đúng nội dung thẻ
   renderMarkers();
   const m = allMembers()[id];
   if (m && m.sharing !== false && typeof m.lat === "number") {
@@ -1478,9 +1480,12 @@ function openDetail(id) {
 function closeDetail() {
   if (!selectedId) return;
   const id = selectedId, focused = $("#memberDetail").contains(document.activeElement);
+  const from = $("#sheet").getBoundingClientRect().height;
   selectedId = null;
   $("#memberDetail").hidden = true;
   $("#sheetHome").hidden = false;
+  $("#sheet").classList.remove("detail-open");
+  setSheetMode(sheetMode, true, from);
   $("#sheetBody").scrollTop = homeScroll;
   if (focused) $(`#memberList li[data-id="${id}"] .member-main`)?.focus({ preventScroll: true }); // bàn phím / trình đọc màn hình
   renderMarkers();
@@ -1751,6 +1756,7 @@ function stopPlacing() {
   previewCircle = null;
   $("#placeEditor").hidden = true;
   $("#main").classList.remove("placing");
+  setSheetMode(sheetMode, false); // màn hình có thể đã đổi cỡ trong lúc bảng bị ẩn
   renderPlaces();
   render();
 }
@@ -2049,7 +2055,8 @@ function releaseWakeLock() {
  * chỉ có khi danh sách dài hơn nấc half). Bảng đi theo ngón tay; thả ra thì trượt (có nảy nhẹ) tới
  * nấc gần nhất theo hướng + tốc độ vuốt. Kéo quá hai đầu thì có lực cản kiểu dây thun.
  * Kéo từ trong danh sách: đang ở đầu danh sách mà vuốt xuống → thu bảng; vuốt lên khi chưa full → mở rộng;
- * còn lại là cuộn danh sách như thường. Trên máy tính bảng là cột bên trái → chỉ bấm để thu/mở. */
+ * còn lại là cuộn danh sách như thường. Thẻ chi tiết: chỉ 2 nấc, "half" = vừa đúng nội dung thẻ (không kéo cao thêm),
+ * "peek" = còn ảnh + tên. Trên máy tính bảng là cột bên trái → chỉ bấm để thu/mở. */
 let sheetMode = "half";
 const SHEET_ORDER = ["peek", "half", "full"];
 
@@ -2057,16 +2064,25 @@ function sheetMetrics() {
   const sheet = $("#sheet"), body = $("#sheetBody");
   const headH = sheet.querySelector(".sheet-head").offsetHeight;
   const pad = parseFloat(getComputedStyle(sheet).paddingBottom) || 0;
-  const natural = headH + body.scrollHeight + pad;
+  // Đo chính nội dung, không dùng body.scrollHeight: bảng đang cao hơn nội dung thì scrollHeight = chiều cao bảng.
+  const content = $(selectedId ? "#memberDetail" : "#sheetHome").getBoundingClientRect().height + (parseFloat(getComputedStyle(body).paddingBottom) || 0);
+  const natural = Math.ceil(headH + content + pad);
   const topLimit = $(".topbar").getBoundingClientRect().bottom + 10; // chừa thanh trên cùng
+  if (selectedId) {
+    const half = Math.min(natural, innerHeight - topLimit);
+    const person = $(".detail-head").getBoundingClientRect().bottom - $("#memberDetail").getBoundingClientRect().top; // nút quay lại + ảnh + tên
+    return { peek: Math.min(half, Math.ceil(headH + person + pad + 14)), half, full: null };
+  }
   const peek = headH + pad + 4;
   const half = Math.max(peek, Math.min(natural, innerHeight * 0.48));
   const full = Math.min(natural, innerHeight - topLimit);
   return { peek, half, full: full > half + 40 ? full : null };
 }
 
-function setSheetMode(mode, animate = true) {
+// from: chiều cao xuất phát, khi nội dung vừa bị thay (mở / đóng thẻ) nên chiều cao hiện tại không còn đúng.
+function setSheetMode(mode, animate = true, from = null) {
   const sheet = $("#sheet"), main = $("#main");
+  if (placing) { sheetMode = mode; return; } // bảng đang ẩn, không đo được; stopPlacing() đặt lại sau
   if (isDesktop()) {
     sheetMode = mode === "peek" ? "peek" : "half";
     sheet.style.height = "";
@@ -2079,12 +2095,13 @@ function setSheetMode(mode, animate = true) {
   const m = sheetMetrics();
   if (mode === "full" && !m.full) mode = "half";
   const target = m[mode];
-  const from = sheet.getBoundingClientRect().height;
+  from ??= sheet.getBoundingClientRect().height;
   sheetMode = mode;
+  sheet.style.setProperty("--sheet-max", `${innerHeight - $(".topbar").getBoundingClientRect().bottom - 10}px`); // trần của thẻ chi tiết
   sheet.classList.toggle("collapsed", mode === "peek");
   sheet.classList.toggle("full", mode === "full");
   $("#sheetHandle").setAttribute("aria-expanded", String(mode !== "peek"));
-  $("#sheetBody").inert = mode === "peek"; // thu gọn: không cho tab vào các dòng bị che
+  $("#sheetBody").inert = mode === "peek" && !selectedId; // thu gọn: không cho tab vào các dòng bị che
 
   clearTimeout(sheet._settle);
   sheet.classList.add("moving");
@@ -2093,7 +2110,7 @@ function setSheetMode(mode, animate = true) {
   sheet.style.height = `${from}px`;
   void sheet.offsetHeight; // ghi nhận điểm xuất phát trước khi bật transition
   const ms = animate && !reducedMotion() ? 420 : 0;
-  sheet.style.transition = ms ? `height ${ms}ms cubic-bezier(.25, 1.2, .5, 1)` : "none";
+  sheet.style.transition = ms ? `height ${ms}ms cubic-bezier(${selectedId ? ".2, .8, .2, 1" : ".25, 1.2, .5, 1"})` : "none"; // thẻ chi tiết: không nảy quá đà (lòi khoảng trắng)
   sheet.style.height = `${target}px`;
   sheet._settle = setTimeout(() => {
     sheet.style.transition = "";
@@ -2148,7 +2165,7 @@ function bindSheetGestures() {
     const min = g.m.peek, max = g.m.full || g.m.half;
     let h = g.h0 - (y - g.y0);
     if (h < min) h = min - (min - h) / 3;   // lực cản dây thun
-    if (h > max) h = max + (h - max) / 3;
+    if (h > max) h = selectedId ? max : max + (h - max) / 3; // thẻ chi tiết đã hiện hết: không giãn thêm
     sheet.style.height = `${h}px`;
     return true;
   };
@@ -2197,6 +2214,14 @@ function bindSheetGestures() {
   handle.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") move(e.clientX, e.clientY, ts(e)); });
   handle.addEventListener("pointerup", (e) => { if (e.pointerType === "mouse") end(); });
 
+  // Thẻ chi tiết đang thu gọn: chạm vào đâu cũng mở lại
+  body.addEventListener("click", (e) => {
+    if (suppressClick || isDesktop() || !selectedId || sheetMode !== "peek" || e.target.closest("button, a")) return;
+    buzz();
+    sound.snap(true);
+    setSheetMode("half");
+  });
+
   // Chạm vào tiêu đề: thu gọn ⇄ mở
   handle.addEventListener("click", () => {
     if (suppressClick) return;
@@ -2234,7 +2259,7 @@ function bindMainUi() {
   map.on("moveend", () => $("#crosshair").classList.remove("lift"));
   new ResizeObserver(keepTarget).observe($("#placePanel"));
 
-  $("#detailBack").addEventListener("click", () => { buzz(); sound.back(); closeDetail(); });
+  $("#detailBack").addEventListener("click", () => { buzz(); sound.back(); closeDetail(); if (sheetMode === "peek") setSheetMode("half"); });
   $("#detailShare").addEventListener("click", () => selectedId && shareLocationOf(selectedId));
   $("#detailSavePlace").addEventListener("click", () => {
     const m = selectedId && allMembers()[selectedId];
