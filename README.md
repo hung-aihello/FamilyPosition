@@ -107,6 +107,7 @@ Giới hạn:
 - Không có tốc độ / sai số GPS. *Đã về / đã rời* (dòng thời gian, chuông, “Ở Nhà từ …”) do **máy người khác đang mở app** ghi giúp, giờ = lúc phím tắt gửi. Không ai mở app thì người mở app sau sẽ ghi bù, đúng giờ.
 - **⚡ Đang sạc** hiện khi phím tắt báo đang cắm sạc (tự động hoá *Bộ sạc → Được kết nối / Được ngắt kết nối*), tự tắt nếu quá 2 giờ không ai báo lại.
 - **Mã kết nối gắn với nhóm hiện tại**: Đổi mã nhóm / rời nhóm thì phải dán lại mã mới vào phím tắt.
+- **Tắt “Chia sẻ vị trí của tôi” thì phím tắt báo *Permission denied*** — đúng ý đồ: Security Rules không nhận `lat`/`lng`/`place` khi `sharing = false`, nên toạ độ không lên server. Bật chia sẻ lại là phím tắt chạy bình thường.
 - Không dùng được nếu bật Enforce App Check (xem trên).
 
 Kỹ thuật: phím tắt gồm *Lấy vị trí hiện tại* → *Lấy mức pin* → *Lấy mức pin* (chọn mục bộ sạc) → *Văn bản* (mẫu `{"lat":LAT,"lng":LNG,"acc":null,"battery":PIN,"charging":"SAC","chargingAt":{".sv":"timestamp"},"speed":0,"updatedAt":{".sv":"timestamp"}}`, LAT/LNG/PIN/SAC thay bằng biến) → *Văn bản* (mã kết nối = `{databaseURL}/families/{mã}/members/{id}.json`) → *Lấy nội dung của URL* `PATCH`, nội dung = **Tệp** (khung mẫu). Không dùng kiểu JSON của Phím tắt: iPhone cài tiếng Việt gửi số thập phân thành chuỗi `"16,09"` → rules từ chối. `speed:0` để không báo “đang di chuyển” theo tốc độ cũ; `acc:null` xoá sai số cũ và là dấu hiệu “vị trí từ phím tắt” để máy khác ghi đến/rời giúp (`trackOthersPlaces`, khoá sự kiện cố định theo `updatedAt` nên nhiều máy ghi vẫn chỉ ra một); `charging` là chữ tuỳ ngôn ngữ máy (“Đúng”, “Có”…), rules nhận cả boolean lẫn chuỗi ≤ 12 ký tự, `chargingAt` để tự tắt sau 2 giờ; `online` đã do onDisconnect đặt false. Rules chỉ nhận khi hồ sơ đã tồn tại.
@@ -135,7 +136,7 @@ Chạm vào một người (trong danh sách hoặc trên bản đồ) để xem
 - Không dùng Firebase Storage vì cần đăng nhập, và rules Storage đang dùng chung với app khác.
 
 ## Đổi mã nhóm
-**⚙️ Cài đặt → 🔄 Đổi mã nhóm**: bạn chuyển sang nhóm mới với mã mới, app tự mở hộp mời để gửi lại cho những người muốn giữ. Ai chỉ có mã cũ sẽ không thấy bạn nữa. Dùng khi mã bị lộ hoặc muốn loại ai đó ra — đây là cách **thu hồi quyền truy cập thật sự** (xem giới hạn bên dưới).
+**⚙️ Cài đặt → 🔄 Đổi mã nhóm**: bạn chuyển sang nhóm mới với mã mới, app tự mở hộp mời để gửi lại cho những người muốn giữ. Ai chỉ có mã cũ sẽ không thấy bạn nữa. Ảnh đại diện và các địa điểm đã lưu được mang sang nhóm mới (dòng thời gian thì không). Dùng khi mã bị lộ hoặc muốn loại ai đó ra — đây là cách **thu hồi quyền truy cập thật sự** (xem giới hạn bên dưới).
 
 ## Giới hạn cần biết
 
@@ -152,6 +153,7 @@ Khi phát hành: tăng `APP_VERSION` + `APP_RELEASED` ở đầu `app.js` và th
 
 | Phiên bản | Ngày | Thay đổi |
 |---|---|---|
+| 1.14.0 | 25/11/2026 | **Tắt chia sẻ là server từ chối luôn vị trí**, kể cả từ Phím tắt iPhone (cần deploy Rules mới); vị trí còn sót của người đã tắt chia sẻ được xoá giúp. **Đổi mã nhóm mang theo ảnh đại diện + địa điểm.** “Đang mở app” đổi thành “Đang chia sẻ trực tiếp”, trong danh sách là “Trực tiếp” (đúng cả khi app native chạy nền) |
 | 1.13.5 | 25/11/2026 | Hình viên pin vẽ đúng mức (trước đây pin sắp hết vẫn hiện 🔋 đầy); pin cũ hơn vị trí trên 30 phút thì ghi giờ báo và không báo động; tắt chia sẻ thì ẩn pin. Sửa: mở lại app gửi nhầm vị trí cũ thành “vừa xong”; mất GPS / đã dừng vẫn báo đang đi; laptop lệch hàng km đè vị trí Phím tắt; máy sai giờ xoá mất dòng thời gian; chạm vào danh sách hay bị trượt; ghim bị bảng che; đặt địa điểm bị lệch khi bàn phím bật; địa chỉ kẹt “Đang tìm…”; cấp lại quyền vị trí phải mở lại app; không nhả “giữ màn hình sáng”; xoay ngang danh sách không bấm được; từ chối lời mời bị kẹt ở màn chào |
 | 1.13.4 | 24/11/2026 | Máy không tải được OSM (đã xác nhận trên iPhone 14 Pro Max iOS 18.7 và iPhone iOS 16.7: 0 ô, toàn lỗi) thì đổi sang Esri ngay khi lỗi 6 ô, và nhớ 1 ngày để lần mở sau không phải chờ bản đồ trắng |
 | 1.13.3 | 24/11/2026 | Bản đồ tự đổi sang máy chủ dự phòng (Esri) nếu 10 giây không tải được ô OSM nào. Cuối Cài đặt có dòng chẩn đoán bản đồ (nguồn, số ô tải được/lỗi, cỡ khung, iOS/Android, mở bằng gì, lỗi JS gần nhất) để chụp gửi khi báo lỗi |

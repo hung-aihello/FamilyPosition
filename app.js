@@ -3,7 +3,7 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.13.5";
+const APP_VERSION = "1.14.0";
 const APP_RELEASED = "25/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 // Lỗi JS gần nhất: hiện ở dòng chẩn đoán cuối Cài đặt
@@ -37,6 +37,7 @@ const BATTERY_LAG = 30 * 60e3;  // vị trí mới hơn lần báo pin quá 30 p
 const FIX_STALE = 60e3;         // vừa quay lại app mà lần định vị trước đã quá 1 phút → chờ lần định vị mới
 const MOVING_SPEED = 1.5;       // m/s (~5 km/h) trở lên coi là đang di chuyển
 const WALK_SPEED = 2.5;         // m/s (~9 km/h) trở xuống coi là đi bộ
+const LIVE_TEXT = "Đang chia sẻ trực tiếp"; // đang mở app, hoặc app native đang chạy nền (trong danh sách hẹp chỗ: "Trực tiếp")
 const ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 const AVATARS = [
@@ -453,6 +454,7 @@ const isDenied = (err) => /PERMISSION_DENIED|permission.denied/i.test(String(err
 function switchFamily(code) {
   if (state.familyId && state.familyId !== code) queueLeave(state.familyId);
   unqueue({ f: code, m: state.memberId });
+  delete state.carry;
   state.familyId = code;
   state.member = false; // false = vừa vào nhóm (khác undefined = cài từ bản cũ)
   saveState();
@@ -464,6 +466,7 @@ function claimMember(code, mid, rec) {
   const cur = { f: state.familyId, m: state.memberId };
   if (cur.f && !sameSlot(cur, { f: code, m: mid })) queueLeave(cur.f, cur.m); // bỏ bản ghi rác của máy này (nếu có)
   unqueue({ f: code, m: mid });
+  delete state.carry;
   Object.assign(state, {
     familyId: code, memberId: mid, member: true,
     name: rec.name, emoji: rec.emoji || state.emoji, color: rec.color || state.color,
@@ -642,6 +645,8 @@ async function enterMain(opts = {}) {
     fb.update(meRef(), { sharing: true }).catch(onWriteError);
   }
 
+  applyCarry();
+
   fb.onValue(fb.ref(fb.db, ".info/serverTimeOffset"), (s) => { serverOffset = s.val() || 0; });
   fb.onValue(fb.ref(fb.db, ".info/connected"), (s) => {
     connected = !!s.val();
@@ -661,6 +666,7 @@ async function enterMain(opts = {}) {
       if (!state.member) { state.member = true; saveState(); }
       prunePhotos();
       syncFromServer(mine);
+      hideLeftovers();
     } else if (state.member) {
       return onKicked();
     }
@@ -732,6 +738,28 @@ async function enterMain(opts = {}) {
   }
 }
 
+// Sau khi đổi mã nhóm: ghi ảnh đại diện + địa điểm mang theo lên nhóm mới. Server nhận đủ mới xoá bản cất trong máy
+// (mất mạng giữa chừng thì lần mở app sau ghi tiếp). `at` = bây giờ để ai đang ở sẵn đó không bị tính là "vừa đến".
+function applyCarry() {
+  const c = state.carry;
+  if (!c) return;
+  const jobs = [];
+  if (c.f === state.familyId) {
+    if (c.photo) {
+      photoCache.set(state.memberId, c.photo);
+      photoTried.set(state.memberId, c.photo.v);
+      persistPhotos();
+      jobs.push(fb.set(famRef(`photos/${state.memberId}`), c.photo), fb.update(meRef(), { photo: c.photo.v }));
+    }
+    for (const [id, p] of Object.entries(c.places || {})) jobs.push(fb.set(famRef(`places/${id}`), { ...p, at: fb.serverTimestamp() }));
+  }
+  Promise.allSettled(jobs).then((list) => {
+    if (list.some((r) => r.status === "rejected" && !isDenied(r.reason))) return;
+    delete state.carry;
+    saveState();
+  });
+}
+
 // Dọn sự kiện cũ (ai mở app cũng dọn giúp) — giữ database gọn. Chỉ chạy sau khi đã kết nối, lúc đã biết giờ server:
 // máy nào để đồng hồ chạy nhanh vài ngày mà dọn theo giờ máy thì xoá mất dòng thời gian của cả nhà.
 let eventsCleaned = false;
@@ -743,6 +771,17 @@ function cleanOldEvents() {
     s.forEach((c) => { old[c.key] = null; });
     if (Object.keys(old).length) fb.update(famRef("events"), old).catch(() => {});
   }).catch(() => { eventsCleaned = false; });
+}
+
+// Rules không nhận vị trí của người đang tắt chia sẻ (kể cả từ Phím tắt iPhone). Vị trí còn sót từ trước khi có
+// luật đó: máy nào đang mở app cũng xoá giúp, vì máy của người ấy có thể không mở app.
+const hiddenDone = new Set();
+function hideLeftovers() {
+  for (const [id, m] of Object.entries(members)) {
+    if (m?.sharing !== false || (m.lat == null && m.lng == null && m.place == null) || hiddenDone.has(id)) continue;
+    hiddenDone.add(id); // mỗi lần mở app chỉ thử một lần cho mỗi người
+    fb.update(famRef(`members/${id}`), { ...HIDDEN_POS }).catch(() => {});
+  }
 }
 
 // Nút Back (Android): đóng hộp thoại / thẻ chi tiết trước; hết thì đưa app xuống nền
@@ -1289,7 +1328,7 @@ function renderList() {
     } else if (!hasPos) {
       text("Chưa có vị trí");
     } else {
-      text(status === "on" ? "Đang mở app" : relTime(now() - (m.updatedAt || 0)));
+      text(status === "on" ? "Trực tiếp" : relTime(now() - (m.updatedAt || 0)));
       if (here && !(pl && herePlace && pl.id === herePlace.id)) text(`cách ${formatDistance(distanceMeters(here, m))}`);
     }
     const batt = isMe ? null : batteryOf(m);
@@ -1415,7 +1454,7 @@ function renderDetail() {
   const st = $("#detailStatus");
   st.classList.toggle("off", !pl && !moving);
   st.textContent = pl ? placeLabel(pl)
-    : moving || (m.sharing === false ? "Đã tắt chia sẻ vị trí" : !hasPos ? "Chưa có vị trí" : status === "on" ? "Đang mở app" : "Không ở địa điểm quen");
+    : moving || (m.sharing === false ? "Đã tắt chia sẻ vị trí" : !hasPos ? "Chưa có vị trí" : status === "on" ? LIVE_TEXT : "Không ở địa điểm quen");
 
   const facts = [];
   const fact = (icon, html, extra = "") => facts.push(`<li><span class="fi" aria-hidden="true">${icon}</span><span class="fv ${extra}">${html}</span></li>`);
@@ -1426,7 +1465,7 @@ function renderDetail() {
     fact("📍", escapeHtml(known || "Đang tìm địa chỉ…"), known ? "addr" : "addr loading");
     const age = now() - (m.updatedAt || 0);
     fact("🕒", escapeHtml(isMe && gpsOn() && myPos ? "Đang chia sẻ từ máy này"
-      : status === "on" ? "Đang mở app" : `Cập nhật ${relTime(age)}${m.updatedAt ? ` (${clockTime(m.updatedAt)})` : ""}`));
+      : status === "on" ? LIVE_TEXT : `Cập nhật ${relTime(age)}${m.updatedAt ? ` (${clockTime(m.updatedAt)})` : ""}`));
     const here = myLocation();
     if (!isMe && here) fact("📏", escapeHtml(`Cách bạn ${formatDistance(distanceMeters(here, m))}`));
     if (m.acc) fact("🎯", escapeHtml(`Sai số khoảng ±${formatDistance(m.acc)}`));
@@ -1525,7 +1564,7 @@ function trackMyPlace() {
   const next = placeAt(myPos, was);
   if (next === was && (stored.place || null) === was) return;
 
-  meWrite({ place: next, placeSince: next ? fb.serverTimestamp() : null }).catch(onWriteError);
+  meWrite({ place: next, placeSince: next ? fb.serverTimestamp() : null }).catch(onPosDenied);
   if (was && next !== was) logEvent("leave", was);
   if (next && next !== was) logEvent("arrive", next);
   // Cập nhật ngay trên máy để lần định vị kế tiếp không ghi trùng trước khi server phản hồi.
@@ -1899,7 +1938,13 @@ function pushPosition(force) {
   if (battery) { data.battery = battery.level; data.charging = battery.charging; data.chargingAt = fb.serverTimestamp(); }
   const speed = mySpeed();
   data.speed = typeof speed === "number" && speed >= 0 ? Math.min(speed, 400) : null;
-  meWrite(data).catch(onWriteError);
+  meWrite(data).catch(onPosDenied);
+}
+
+// Vừa tắt chia sẻ ở máy khác mà máy này chưa kịp biết → server từ chối vị trí là đúng, đừng báo lỗi.
+function onPosDenied(err) {
+  if (!isDenied(err)) return onWriteError(err);
+  setTimeout(() => { if (state.sharing) onWriteError(err); }, 3000);
 }
 
 function onWriteError(err) {
@@ -2203,7 +2248,10 @@ function bindMainUi() {
   bindCropGestures();
   $("#leaveFamily").addEventListener("click", () => { $("#settingsDialog").close(); $("#confirmLeave").showModal(); });
   $("#confirmLeaveYes").addEventListener("click", (e) => { e.currentTarget.disabled = true; leaveFamily(); });
-  $("#rekeyFamily").addEventListener("click", () => { $("#settingsDialog").close(); $("#confirmRekey").showModal(); });
+  $("#rekeyFamily").addEventListener("click", () => {
+    if (!membersLoaded || !placesLoaded) return toast("Đang tải dữ liệu nhóm, thử lại sau giây lát nhé."); // để không bỏ sót địa điểm, ảnh
+    $("#settingsDialog").close(); $("#confirmRekey").showModal();
+  });
   $("#confirmRekeyYes").addEventListener("click", (e) => {
     e.currentTarget.disabled = true;
     e.currentTarget.textContent = "Đang tạo mã mới…";
@@ -2260,7 +2308,7 @@ function openShortcut() {
   if (shortcutUrl) $("#shortcutLink").href = shortcutUrl;
   const mine = members[state.memberId];
   $("#shortcutStatus").textContent = !state.sharing
-    ? "⚠️ Bạn đang tắt “Chia sẻ vị trí của tôi” — bật lại trong Cài đặt thì người nhà mới thấy."
+    ? "⚠️ Bạn đang tắt “Chia sẻ vị trí của tôi” nên phím tắt bị từ chối (Permission denied). Bật lại trong Cài đặt là chạy được."
     : mine?.updatedAt ? `Vị trí của bạn cập nhật lần cuối: ${clockTime(mine.updatedAt)} (${relTime(now() - mine.updatedAt)})` : "";
   $("#shortcutDialog").showModal();
 }
@@ -2545,6 +2593,7 @@ async function leaveFamily() {
   stopWatching();
   releaseWakeLock();
   queueLeave(state.familyId);
+  delete state.carry;
   delete state.familyId;
   state.member = false;
   saveState();
@@ -2554,11 +2603,16 @@ async function leaveFamily() {
 }
 
 // Đổi mã nhóm: chuyển mình sang nhóm mới với mã mới, rồi mời lại những người cần.
+// Ảnh đại diện và các địa điểm đi theo: cất vào máy (state.carry), tải lại xong thì applyCarry() ghi lên nhóm mới.
 // Ai chỉ có mã cũ sẽ không thấy mình nữa (mã cũ bị lộ / muốn loại ai đó ra).
 async function rekeyFamily() {
   kicked = true; // rời nhóm cũ có chủ đích, đừng báo "bị xoá"
   stopWatching();
+  const photo = members[state.memberId]?.photo ? photoCache.get(state.memberId) : null;
+  const keep = { places, photo: photo && validPhoto(photo.data) ? photo : null };
   switchFamily(newFamilyCode());
+  state.carry = { f: state.familyId, ...keep };
+  saveState();
   try { sessionStorage.setItem("nhaminh.openInvite", "1"); } catch { /* bỏ qua */ }
   await Promise.race([processLeaveQueue(), sleep(2500)]);
   location.replace(location.pathname);
