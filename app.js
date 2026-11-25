@@ -3,12 +3,12 @@ import { sound } from "./sound.js";
 import * as native from "./native.js";
 
 // Tăng mỗi lần phát hành (xem "Lịch sử phiên bản" trong README).
-const APP_VERSION = "1.14.0";
+const APP_VERSION = "1.14.1";
 const APP_RELEASED = "25/11/2026";
 const FIREBASE_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
 // Lỗi JS gần nhất: hiện ở dòng chẩn đoán cuối Cài đặt
 let lastJsError = "";
-addEventListener("error", (e) => { if (e.target?.classList?.contains("leaflet-tile")) return; lastJsError = String(e.message || e.target?.src || e.target?.href || "?").slice(0, 120); }, true);
+addEventListener("error", (e) => { if (e.target?.classList?.contains("leaflet-tile") || /ResizeObserver loop/.test(e.message)) return; lastJsError = String(e.message || e.target?.src || e.target?.href || "?").slice(0, 120); }, true);
 addEventListener("unhandledrejection", (e) => { lastJsError = String(e.reason?.message || e.reason).slice(0, 120); });
 const STORE_KEY = "nhaminh.v1";
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"; // bỏ các ký tự dễ nhầm: i l o 0 1
@@ -109,9 +109,23 @@ const inviteUrl = () => `${location.origin}${location.pathname}?f=${state.family
 function showScreen(id) {
   for (const s of $$(".screen")) s.hidden = s.id !== id;
 }
+// Hộp thoại (showModal) nằm ở "lớp trên cùng" của trình duyệt, che mọi z-index → thông báo phải vào trong hộp thoại đó
+// (để trình đọc màn hình cũng đọc được) và lên cùng lớp bằng popover. Máy chưa có popover (iOS 16): position: fixed là đủ.
+function bringToFront(el) {
+  const host = $$("dialog[open]").pop() || document.body;
+  if (el.parentNode !== host) host.appendChild(el);
+  if (!el.showPopover) return;
+  try {
+    el.popover = "manual";
+    if (el.matches(":popover-open")) el.hidePopover();
+    el.showPopover();
+  } catch { /* bỏ qua */ }
+}
 let toastTimer;
 function toast(msg, ms = 2800) {
   const t = $("#toast");
+  bringToFront(t);
+  void t.offsetWidth; // vừa hiện ra: ghi nhận điểm xuất phát để còn trượt vào
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toastTimer);
@@ -119,6 +133,12 @@ function toast(msg, ms = 2800) {
 }
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+// Chỉ dựng lại khi thật sự đổi: GPS báo mỗi giây, dựng lại hoài làm ảnh chớp, hiệu ứng chạy lại từ đầu, mất chỗ đang bôi đen.
+function setHtml(el, html) {
+  if (el._html === html) return;
+  el._html = html;
+  el.innerHTML = html;
 }
 const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 // Rung nhẹ khi chạm (Android). iOS không hỗ trợ → bỏ qua.
@@ -346,6 +366,7 @@ let pendingInvite = null;
 
 function gotoStep(step) {
   for (const s of $$(".ob-step")) s.hidden = s.dataset.step !== step;
+  $("#onboarding").scrollTop = 0;
   const first = $(`.ob-step[data-step="${step}"] input, .ob-step[data-step="${step}"] .btn-primary`);
   if (step === "profile") setTimeout(() => $("#nameInput").focus(), 50);
   else first?.focus({ preventScroll: true });
@@ -360,8 +381,13 @@ function startOnboarding() {
     state.emoji = emoji; state.color = color; validate();
   });
   nameInput.addEventListener("input", validate);
-  nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") nameInput.blur(); });
+  nameInput.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    e.preventDefault(); // không thì phím Enter bấm luôn nút đang được chọn ở bước sau
+    if ($("#profileNext").disabled) nameInput.blur(); else $("#profileNext").click();
+  });
   validate();
+  $("#codeInput").addEventListener("input", () => { $("#codeError").hidden = true; });
 
   $("#profileNext").addEventListener("click", () => {
     state.name = nameInput.value.trim().slice(0, 24);
@@ -373,6 +399,7 @@ function startOnboarding() {
   $("#joinInvited").addEventListener("click", () => joinFamily(pendingInvite, $("#joinInvited")));
   $("#ignoreInvite").addEventListener("click", () => {
     pendingInvite = null;
+    clearInviteUrl();
     if (inFamily()) enterMain(); else showFamilyStep(); // đang có nhóm: từ chối lời mời là về lại nhóm mình
   });
 
@@ -410,6 +437,10 @@ function startOnboarding() {
 }
 
 const inFamily = () => !!(state.familyId && state.name && state.emoji);
+// Mã mời được giữ trên thanh địa chỉ tới khi vào nhóm / từ chối, để tải lại trang giữa chừng không mất lời mời.
+function clearInviteUrl() {
+  if (new URLSearchParams(location.search).has("f")) history.replaceState(null, "", location.pathname);
+}
 function showFamilyStep() {
   $("#inviteBox").hidden = !pendingInvite;
   $("#chooseBox").hidden = !!pendingInvite;
@@ -616,6 +647,7 @@ const HIDDEN_POS = { lat: null, lng: null, acc: null, speed: null, place: null, 
 
 async function enterMain(opts = {}) {
   const welcome = state.member === false; // vừa tạo / vào nhóm lần đầu
+  clearInviteUrl();
   showScreen("main");
   if (welcome) {
     setTimeout(() => {
@@ -707,6 +739,8 @@ async function enterMain(opts = {}) {
 
   if (gpsOn()) startWatching();
   updateStatus();
+  addEventListener("online", updateStatus);
+  addEventListener("offline", updateStatus);
 
   setInterval(() => {
     if (myPos && gpsOn() && appVisible()) pushPosition(true);
@@ -902,16 +936,21 @@ function mapPadding() {
   const el = $("#sheet"), sheet = el.getBoundingClientRect();
   // Bảng đang trượt sang nấc khác: tính theo chiều cao SẼ tới, không thì ghim nằm khuất dưới bảng.
   const sliding = el.classList.contains("moving") && !el.classList.contains("dragging");
-  const h = sliding && !isDesktop() ? sheetMetrics()[sheetMode] || sheet.height : sheet.height;
-  return isDesktop()
-    ? { paddingTopLeft: [sheet.width + 48, 150], paddingBottomRight: [104, 48] }
-    : { paddingTopLeft: [48, 150], paddingBottomRight: [104, h + 36] }; // 104 = cột nút nổi + nửa bong bóng ghim
+  if (isDesktop()) return { paddingTopLeft: [sheet.width + 48, 150], paddingBottomRight: [104, 48] };
+  let h = sheet.height;
+  if (sheetMode === "full") h = sheetMetrics().half; // bảng che gần hết bản đồ: căn sẵn cho lúc bảng hạ xuống
+  else if (sliding) h = sheetMetrics()[sheetMode] || h;
+  // Màn hình thấp (điện thoại xoay ngang): bớt lề trên để vùng căn luôn còn ít nhất 40 px, không thì Leaflet tính ra zoom sai.
+  const top = Math.min(150, Math.max(70, map.getSize().y - h - 36 - 40));
+  return { paddingTopLeft: [48, top], paddingBottomRight: [104, h + 36] }; // 104 = cột nút nổi + nửa bong bóng ghim
 }
 
 function focusOn(points, animate = true) {
   if (!points.length) return;
   const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
-  const opts = { ...mapPadding(), maxZoom: 16, animate };
+  if (reducedMotion()) animate = false;
+  // Xem một người mà đang phóng to hơn mức 16 thì giữ nguyên, đừng thu nhỏ lại.
+  const opts = { ...mapPadding(), maxZoom: points.length === 1 ? Math.max(16, map.getZoom()) : 16, animate };
   if (animate) map.flyToBounds(bounds, { ...opts, duration: 0.8 });
   else map.fitBounds(bounds, opts);
 }
@@ -1013,19 +1052,27 @@ const freshEvents = new Set();
 let eventsPrimed = false;
 function announceEvents() {
   const fresh = events.filter((e) => !seenEvents.has(e.id));
+  const told = events.filter((e) => seenEvents.has(e.id));
   for (const e of events) seenEvents.add(e.id);
   if (!eventsPrimed) { eventsPrimed = true; return; } // lần tải đầu: chỉ là lịch sử
   for (const e of fresh) {
+    // Một người dùng 2 máy, máy nào cũng ghi → chỉ báo một lần.
+    if (told.some((x) => x.m === e.m && x.type === e.type && x.place === e.place && Math.abs(x.at - e.at) < 2 * 60e3)) continue;
+    told.push(e);
     freshEvents.add(e.id);
     setTimeout(() => freshEvents.delete(e.id), 3000);
     if (e.m !== state.memberId && now() - (e.at || 0) < 5 * 60e3) showLive(e);
   }
 }
 
-let liveTimer;
+const liveQueue = []; // mấy người về cùng lúc: báo lần lượt, không đè nhau
+let liveBusy = false;
+// Trả về true nếu đã hiện.
 function showLive(e) {
   const m = members[e.m], pl = places[e.place];
-  if (!m?.name || !pl) return;
+  if (!m?.name || !pl) return false;
+  if (liveBusy) { if (liveQueue.length < 5) liveQueue.push(e); return false; }
+  liveBusy = true;
   const home = pl.emoji === "🏠";
   const verb = e.type === "leave" ? "vừa rời" : home ? "đã về đến" : "vừa đến";
   const box = $("#liveToast");
@@ -1035,6 +1082,7 @@ function showLive(e) {
     <span class="lt-emoji" aria-hidden="true">${e.type === "leave" ? "👋" : home ? "🏡" : "🎉"}</span>`;
   box.classList.remove("out");
   box.hidden = false;
+  bringToFront(box);
   buzz([30, 60, 30]);
   if (e.type === "arrive") sound.arrive(home); else sound.leave();
   if (e.type === "arrive") {
@@ -1044,11 +1092,15 @@ function showLive(e) {
     });
   }
   playOnce(markers.get(e.m)?.marker.getElement()?.firstElementChild, "hop", 0, 700);
-  clearTimeout(liveTimer);
-  liveTimer = setTimeout(() => {
+  setTimeout(() => {
     box.classList.add("out");
-    liveTimer = setTimeout(() => { box.hidden = true; }, 380);
+    setTimeout(() => {
+      box.hidden = true;
+      liveBusy = false;
+      while (liveQueue.length && !showLive(liveQueue.shift())); // người đã rời / địa điểm đã xoá thì bỏ qua
+    }, 380);
   }, 5000);
+  return true;
 }
 
 /* ---- Trạng thái hiển thị của một người ---- */
@@ -1329,18 +1381,19 @@ function renderList() {
       text("Chưa có vị trí");
     } else {
       text(status === "on" ? "Trực tiếp" : relTime(now() - (m.updatedAt || 0)));
-      if (here && !(pl && herePlace && pl.id === herePlace.id)) text(`cách ${formatDistance(distanceMeters(here, m))}`);
+      if (here && !(pl && herePlace && pl.id === herePlace.id)) text(`cách ${formatDistance(distanceMeters(here, m))}`.replace(/ /g, "\u00a0")); // xuống dòng thì xuống cả cụm
     }
     const batt = isMe ? null : batteryOf(m);
-    if (batt?.low) meta.unshift(`<span class="batt low">${batteryIcon(batt.level)} ${batt.level}%</span>`); // sắp hết pin: đưa lên đầu cho dễ thấy
+    // Sắp hết pin: đặt cạnh tên cho dễ thấy, dòng phụ vẫn đủ chỗ cho khoảng cách
+    const low = batt?.low ? `<span class="batt low">${batteryIcon(batt.level)} ${batt.level}%</span>` : "";
 
     const html = `
-      <button class="member-main" type="button" aria-label="${escapeHtml(isMe ? "Xem chi tiết của tôi" : `Xem chi tiết của ${m.name}`)}">
-        <span class="avatar" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
+      <button class="member-main" type="button">
+        <span class="avatar" aria-hidden="true" style="--c:${escapeHtml(m.color || "#ccfbf1")}">
           ${avatarInner(m, id)}<span class="status ${status === "on" ? "on" : status === "idle" ? "idle" : ""}"></span>
         </span>
         <span class="member-info">
-          <span class="member-name">${escapeHtml(m.name)}${isMe ? ' <span class="me">(bạn)</span>' : ""}</span>
+          <span class="member-name${low ? " with-batt" : ""}"><span class="nm">${escapeHtml(m.name)}</span>${isMe ? ' <span class="me">(bạn)</span>' : low}</span>
           <span class="member-meta">${tag ? `<span class="member-tag">${escapeHtml(tag)}</span>` : ""}<span class="member-sub">${meta.join(" · ")}</span></span>
         </span>
       </button>${isMe || !hasPos ? "" : `<a class="go-btn" href="${escapeHtml(directionsUrl(m))}" target="_blank" rel="noopener" aria-label="${escapeHtml(`Chỉ đường tới ${m.name}`)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8-8-2Z"/></svg></a>`}`;
@@ -1386,14 +1439,14 @@ function renderFeed() {
   }
 
   $("#feedEmpty").hidden = rows.length > 0;
-  $("#feedList").innerHTML = rows.map((e) => {
+  setHtml($("#feedList"), rows.map((e) => {
     const m = members[e.m], pl = places[e.place];
     const who = e.m === state.memberId ? "Bạn" : m.name;
     const verb = e.type === "leave" ? "đã rời" : pl.emoji === "🏠" ? "đã về" : "đã đến";
     return `<li class="feed-item${freshEvents.has(e.id) ? " new" : ""}">${avatarHtml(m, e.m, "avatar-sm")}
       <span class="feed-text"><strong>${escapeHtml(who)}</strong> ${verb} <strong>${escapeHtml(`${pl.emoji || "📍"} ${pl.name}`)}</strong></span>
       <time class="feed-time" datetime="${new Date(e.at).toISOString()}">${escapeHtml(clockTime(e.at))}</time></li>`;
-  }).join("");
+  }).join(""));
 }
 
 function renderPlaceHint() {
@@ -1402,12 +1455,15 @@ function renderPlaceHint() {
 
 /* ---- Thẻ chi tiết một người ---- */
 
+let homeScroll = 0; // chỗ đang cuộn tới trong danh sách, để đóng thẻ thì về lại đúng chỗ
 function openDetail(id) {
   buzz();
   sound.select();
+  if (!selectedId) homeScroll = $("#sheetBody").scrollTop;
   selectedId = id;
   renderDetail();
-  if (sheetMode === "peek") setSheetMode("half");
+  if (!selectedId) return; // người này vừa rời nhóm
+  if (sheetMode !== "half") setSheetMode("half"); // thu gọn: mở ra xem thẻ; full: hạ xuống để thấy người đó trên bản đồ
   renderMarkers();
   const m = allMembers()[id];
   if (m && m.sharing !== false && typeof m.lat === "number") {
@@ -1421,9 +1477,12 @@ function openDetail(id) {
 
 function closeDetail() {
   if (!selectedId) return;
+  const id = selectedId, focused = $("#memberDetail").contains(document.activeElement);
   selectedId = null;
   $("#memberDetail").hidden = true;
   $("#sheetHome").hidden = false;
+  $("#sheetBody").scrollTop = homeScroll;
+  if (focused) $(`#memberList li[data-id="${id}"] .member-main`)?.focus({ preventScroll: true }); // bàn phím / trình đọc màn hình
   renderMarkers();
 }
 
@@ -1447,7 +1506,7 @@ function renderDetail() {
 
   const av = $("#detailAvatar");
   av.style.setProperty("--c", m.color || "#ccfbf1");
-  av.innerHTML = avatarInner(m, id);
+  setHtml(av, avatarInner(m, id));
   av.classList.toggle("live", status === "on" && !isMe);
   $("#detailName").textContent = isMe ? `${m.name} (bạn)` : m.name;
 
@@ -1464,7 +1523,7 @@ function renderDetail() {
     const known = addrLast.id === id ? addrLast.text || (addrLast.failed ? "Không rõ địa chỉ" : null) : null;
     fact("📍", escapeHtml(known || "Đang tìm địa chỉ…"), known ? "addr" : "addr loading");
     const age = now() - (m.updatedAt || 0);
-    fact("🕒", escapeHtml(isMe && gpsOn() && myPos ? "Đang chia sẻ từ máy này"
+    fact("🕒", escapeHtml(isMe && gpsOn() && fixUsable() ? "Đang chia sẻ từ máy này"
       : status === "on" ? LIVE_TEXT : `Cập nhật ${relTime(age)}${m.updatedAt ? ` (${clockTime(m.updatedAt)})` : ""}`));
     const here = myLocation();
     if (!isMe && here) fact("📏", escapeHtml(`Cách bạn ${formatDistance(distanceMeters(here, m))}`));
@@ -1477,7 +1536,7 @@ function renderDetail() {
       ? `Đang sạc · ${level}% (báo lúc ${clockTime(batt.at)})`
       : `Pin ${level}%${low ? " — sắp hết" : batt.old ? ` (báo lúc ${clockTime(batt.at)})` : ""}`)}</span>`);
   }
-  $("#detailFacts").innerHTML = facts.join("");
+  setHtml($("#detailFacts"), facts.join(""));
   $("#detailFacts").hidden = !facts.length;
 
   $("#detailGo").hidden = isMe || !hasPos;
@@ -1672,8 +1731,7 @@ function startPlacing({ id = null, at = null } = {}) {
   $("#placeEditor").hidden = false;
   $("#placeEditorTitle").textContent = pl ? "Sửa địa điểm" : "Thêm địa điểm";
   $("#placeDelete").hidden = !pl;
-  $("#placeDelete").textContent = "Xoá địa điểm này";
-  delete $("#placeDelete").dataset.armed;
+  disarmDelete();
   $("#placeName").value = placing.name;
   renderPlaceEmojis();
   renderPlaceRadius();
@@ -1716,6 +1774,7 @@ function renderPlaceEmojis() {
       updatePreview();
     });
     grid.appendChild(b);
+    if (emoji === placing.emoji) grid.scrollLeft = b.offsetLeft - grid.offsetLeft - (grid.clientWidth - b.offsetWidth) / 2; // biểu tượng đang chọn ở cuối hàng cũng thấy
   }
 }
 
@@ -1741,10 +1800,9 @@ function renderPlaceRadius() {
 
 // Điểm trên màn hình mà ghim đang chỉ vào: giữa phần bản đồ còn nhìn thấy (trên tấm bảng).
 function targetPoint() {
-  const size = map.getSize();
-  if (isDesktop()) return L.point(size.x / 2, size.y / 2);
-  const panelH = $("#placePanel").getBoundingClientRect().height;
-  return L.point(size.x / 2, Math.max(120, (size.y - panelH) / 2 + 10));
+  const size = map.getSize(), panel = $("#placePanel").getBoundingClientRect();
+  if (size.x - panel.right > 160) return L.point((panel.right + size.x) / 2, size.y / 2); // tấm bảng nằm bên trái (máy tính, xoay ngang)
+  return L.point(size.x / 2, Math.max(120, (size.y - panel.height) / 2 + 10));
 }
 
 function centerOnTarget(latlng, zoom, animate = !reducedMotion()) {
@@ -1758,7 +1816,7 @@ function centerOnTarget(latlng, zoom, animate = !reducedMotion()) {
 
 // Bàn phím bật/tắt, xoay máy, tấm bảng đổi chiều cao → điểm ghim chỉ vào dời trên màn hình.
 // Dời bản đồ theo để ghim vẫn chỉ đúng chỗ đã chọn (không thì lưu lệch hàng chục mét).
-const targetFrame = () => { const s = map.getSize(), pt = targetPoint(); return `${s.x},${s.y},${Math.round(pt.y)}`; };
+const targetFrame = () => { const s = map.getSize(), pt = targetPoint(); return `${s.x},${s.y},${Math.round(pt.x)},${Math.round(pt.y)}`; };
 function keepTarget() {
   if (!placing) return;
   if (placing.center && placing.frame !== targetFrame()) centerOnTarget(placing.center, map.getZoom(), false);
@@ -1808,6 +1866,12 @@ function savePlace() {
   stopPlacing();
 }
 
+let disarmTimer;
+function disarmDelete() {
+  clearTimeout(disarmTimer);
+  $("#placeDelete").textContent = "Xoá địa điểm này";
+  delete $("#placeDelete").dataset.armed;
+}
 function deletePlace() {
   const btn = $("#placeDelete");
   if (!btn.dataset.armed) { // chạm 2 lần để xoá — không cần hộp thoại xác nhận
@@ -1815,6 +1879,8 @@ function deletePlace() {
     btn.textContent = "Chạm lần nữa để xoá";
     buzz(20);
     sound.warn();
+    clearTimeout(disarmTimer);
+    disarmTimer = setTimeout(disarmDelete, 5000); // đổi ý: lần chạm nhầm sau đó không xoá mất
     return;
   }
   const pl = places[placing.id];
@@ -1827,7 +1893,7 @@ function deletePlace() {
 function updateStatus() {
   const dot = $("#statusDot"), text = $("#statusText");
   dot.className = "dot";
-  if (!connected) { dot.classList.add("warn"); text.textContent = "Đang kết nối…"; return; }
+  if (!connected) { dot.classList.add("warn"); text.textContent = navigator.onLine === false ? "Mất mạng" : "Đang kết nối…"; return; }
   if (!state.sharing) { text.textContent = "Không chia sẻ vị trí"; return; }
   if (!gpsOn()) { text.textContent = "Máy này chỉ xem"; return; }
   if (geoError) { dot.classList.add("warn"); text.textContent = "Chưa lấy được vị trí"; return; }
@@ -2226,6 +2292,8 @@ function bindMainUi() {
   $("#copyShortcutBody").addEventListener("click", copyShortcutBody);
 
   $("#saveSettings").addEventListener("click", saveSettings);
+  $("#settingsName").addEventListener("keydown", (e) => { if (e.key === "Enter") e.currentTarget.blur(); });
+  $("#settingsDialog").addEventListener("close", onSettingsClosed);
   // Âm thanh: áp dụng ngay khi gạt (cài đặt riêng của máy này, không cần bấm Lưu)
   $("#sfxToggle").addEventListener("change", (e) => setSfx(e.currentTarget.checked));
   $("#musicToggle").addEventListener("change", (e) => setMusic(e.currentTarget.checked));
@@ -2274,6 +2342,7 @@ function openInvite() {
   const url = inviteUrl();
   const qr = $("#qr");
   qr.innerHTML = "";
+  qr.hidden = !window.QRCode; // không tải được thư viện QR: ẩn khung trắng trống
   if (window.QRCode) {
     new QRCode(qr, { text: url, width: 200, height: 200, colorDark: "#1c1917", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
   }
@@ -2528,6 +2597,14 @@ function applyDraftPhoto(patch) {
 }
 
 let draftAvatar = null;
+// Công tắc trong Cài đặt chỉ áp dụng khi bấm Lưu. Đóng mà quên Lưu (vd tưởng đã tắt chia sẻ) thì nhắc.
+const settingsDirty = () => $("#settingsName").value.trim() !== state.name || draftAvatar?.[0] !== state.emoji || draftPhoto !== undefined
+  || $("#shareToggle").checked !== !!state.sharing || $("#gpsToggle").checked !== (state.deviceGps !== false)
+  || $("#wakeToggle").checked !== !!state.wake || (native.isNative && $("#bgToggle").checked !== (state.bgGps !== false));
+function onSettingsClosed() {
+  if (kicked || document.querySelector("dialog[open]") || !settingsDirty()) return;
+  toast("Chưa bấm Lưu nên thay đổi trong Cài đặt chưa được áp dụng.", 4500);
+}
 function openSettings() {
   $("#settingsName").value = state.name;
   draftAvatar = [state.emoji, state.color];
@@ -2550,7 +2627,7 @@ function openSettings() {
 
 async function saveSettings() {
   const name = $("#settingsName").value.trim().slice(0, 24);
-  if (!name) return toast("Tên không được để trống.");
+  if (!name) { $("#settingsName").focus(); sound.error(); return toast("Tên không được để trống."); }
   const wasGps = gpsOn();
   const wasBg = state.bgGps !== false;
   state.name = name;
@@ -2621,8 +2698,16 @@ async function rekeyFamily() {
 /* ------------------------------------------------------------------ */
 /* Boot                                                                */
 /* ------------------------------------------------------------------ */
+// Mạng hỏng / chậm lúc mở app: báo ngay trên màn hình chờ + nút thử lại, thay vì ba chấm nhảy mãi.
+function splashProblem(msg, failed) {
+  $("#splashMsg").textContent = msg;
+  $("#splashError").hidden = false;
+  $("#splash .dots").hidden = failed;
+}
+
 async function boot() {
   setupDialogs();
+  $("#splashRetry").addEventListener("click", () => location.reload());
   sound.setSfx(state.sfx);
   sound.setMusic(state.music);
   sound.onMusicChange(renderMusicBtn);
@@ -2634,14 +2719,19 @@ async function boot() {
 
   const params = new URLSearchParams(location.search);
   const invited = parseCode(params.get("f") || "");
-  if (params.has("f")) history.replaceState(null, "", location.pathname);
+  if (params.has("f") && (!invited || invited === state.familyId)) clearInviteUrl();
 
+  const slow = setTimeout(() => splashProblem("Mạng hơi chậm, vẫn đang tải…", false), 10e3);
   try {
     await loadFirebase();
+    if (!window.L) throw new Error("Không tải được Leaflet");
   } catch (e) {
     console.error(e);
-    toast("Không tải được dữ liệu. Kiểm tra kết nối mạng.", 6000);
+    splashProblem("Không tải được. Kiểm tra kết nối mạng rồi thử lại nhé.", true);
+    addEventListener("online", () => location.reload(), { once: true });
     return;
+  } finally {
+    clearTimeout(slow);
   }
 
   processLeaveQueue(); // xoá nốt các lần rời nhóm chưa kịp gửi lên server
@@ -2659,6 +2749,8 @@ async function boot() {
       : "Bạn không còn ở trong nhóm này (đã rời nhóm trên máy khác hoặc bị xoá). Có thể vào lại bằng mã mời.";
     setTimeout(() => toast(msg, 6000), 300);
   }
+
+  if (params.has("f") && !invited) setTimeout(() => toast("Đường dẫn mời không đúng. Nhờ người nhà gửi lại nhé.", 5000), 300);
 
   sound.hello(); // trình duyệt chưa cho phát thì đợi tới lần chạm đầu tiên
   if (invited && invited !== state.familyId) {

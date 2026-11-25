@@ -15,6 +15,15 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+// Trình duyệt còn giữ file trong bộ nhớ của tab theo max-age, không hỏi lại service worker: đổi thành "no-cache"
+// để "Tải lại để cập nhật" luôn lấy bản mới.
+function noStale(res) {
+  if (!res.ok || res.type !== "basic") return res;
+  const headers = new Headers(res.headers);
+  headers.set("cache-control", "no-cache");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
@@ -23,13 +32,15 @@ self.addEventListener("fetch", (e) => {
   if (!sameOrigin && !CACHEABLE_HOSTS.includes(url.hostname)) return; // bản đồ, Firebase: đi thẳng
 
   e.respondWith(
-    fetch(req)
+    // Trang của mình: hỏi lại máy chủ (no-cache), không dùng bản trình duyệt còn giữ — GitHub Pages cho giữ 10 phút,
+    // vừa phát hành xong dễ ra index.html mới chạy với app.js cũ.
+    fetch(req, sameOrigin ? { cache: "no-cache" } : {})
       .then((res) => {
         if (res.ok || res.type === "opaque") {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
-        return res;
+        return sameOrigin ? noStale(res) : res;
       })
       .catch(() => caches.match(req, { ignoreSearch: sameOrigin }))
   );

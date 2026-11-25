@@ -28,6 +28,10 @@
       <div class="splash-badge" aria-hidden="true">🏡</div>
       <p class="splash-name">Nhà Mình</p>
       <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div id="splashError" class="splash-error" role="alert" hidden>
+        <p id="splashMsg"></p>
+        <button id="splashRetry" class="btn btn-primary" type="button">Thử lại</button>
+      </div>
     </div>
   </section>
 
@@ -418,36 +422,36 @@
       </div>
 
       <label class="field-label" for="settingsName">Tên hiển thị</label>
-      <input id="settingsName" class="input" type="text" maxlength="24">
+      <input id="settingsName" class="input" type="text" maxlength="24" autocomplete="off" enterkeyhint="done">
 
       <p class="field-label" id="settingsAvatarLabel">Hình emoji <small class="field-note">(dùng khi không có ảnh, và làm màu nền)</small></p>
       <div id="settingsAvatarGrid" class="avatar-grid compact" role="radiogroup" aria-labelledby="settingsAvatarLabel"></div>
 
-      <div class="switch-row">
+      <label class="switch-row">
         <span>
           <strong>Chia sẻ vị trí của tôi</strong>
           <small>Tắt đi thì người thân sẽ không thấy bạn ở đâu</small>
         </span>
         <input id="shareToggle" type="checkbox" class="switch" role="switch" aria-label="Chia sẻ vị trí của tôi">
-      </div>
+      </label>
 
-      <div class="switch-row">
+      <label class="switch-row">
         <span>
           <strong>Lấy vị trí từ máy này</strong>
           <small>Tắt trên laptop/máy tính bảng nếu bạn đã chia sẻ từ điện thoại</small>
         </span>
         <input id="gpsToggle" type="checkbox" class="switch" role="switch" aria-label="Lấy vị trí từ máy này">
-      </div>
+      </label>
 
       <!-- Chỉ hiện trong app Android/iOS (xem native.js) -->
       <div id="nativeRows" hidden>
-        <div class="switch-row">
+        <label class="switch-row">
           <span>
             <strong>Chia sẻ cả khi tắt màn hình</strong>
             <small id="bgHint"></small>
           </span>
           <input id="bgToggle" type="checkbox" class="switch" role="switch" aria-label="Chia sẻ cả khi tắt màn hình">
-        </div>
+        </label>
         <button id="openAppSettings" class="btn btn-secondary" type="button">📍 Mở quyền vị trí của app</button>
       </div>
 
@@ -460,31 +464,31 @@
         🤖 Cài app Android: gửi vị trí cả khi tắt màn hình
       </a>
 
-      <div class="switch-row">
+      <label class="switch-row">
         <span>
           <strong>Âm thanh khi chạm</strong>
           <small>Tiếng bấm nút, chuông khi người thân về nhà</small>
         </span>
         <input id="sfxToggle" type="checkbox" class="switch" role="switch" aria-label="Âm thanh khi chạm">
-      </div>
+      </label>
 
-      <div class="switch-row">
+      <label class="switch-row">
         <span>
           <strong>Nhạc nền</strong>
           <small>Giai điệu hộp nhạc nhẹ nhàng khi mở app</small>
         </span>
         <input id="musicToggle" type="checkbox" class="switch" role="switch" aria-label="Nhạc nền">
-      </div>
+      </label>
 
-      <div class="switch-row" id="wakeRow">
+      <label class="switch-row" id="wakeRow">
         <span>
           <strong>Giữ màn hình sáng</strong>
           <small>Giúp vị trí cập nhật liên tục khi đang di chuyển</small>
         </span>
         <input id="wakeToggle" type="checkbox" class="switch" role="switch" aria-label="Giữ màn hình sáng">
-      </div>
+      </label>
 
-      <button id="saveSettings" class="btn btn-primary btn-lg" type="button">Lưu</button>
+      <div class="save-bar"><button id="saveSettings" class="btn btn-primary btn-lg" type="button">Lưu</button></div>
       <button id="rekeyFamily" class="btn btn-secondary" type="button">🔄 Đổi mã nhóm</button>
       <button id="leaveFamily" class="btn btn-danger" type="button">Rời khỏi nhóm gia đình</button>
       <button class="btn btn-ghost" type="button" data-close>Đóng</button>
